@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+import csv
+import io
+
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import StreamingResponse
 from typing import List
 
@@ -53,6 +56,40 @@ def export_csv(db: Session = Depends(get_db)):
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=books.csv"},
     )
+
+
+@router.post("/import/csv", status_code=status.HTTP_201_CREATED)
+def import_books_from_csv(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Import nhiều books từ file CSV upload.
+
+    Dùng @classmethod BookCreate.from_csv_row() để parse từng dòng CSV.
+
+    Format CSV:
+        title,description,year,author_id,category_id
+        Clean Code,,2008,1,1
+        The Pragmatic Programmer,A must read,1999,2,1
+    """
+    content = file.file.read().decode("utf-8")
+    reader = csv.DictReader(io.StringIO(content))
+
+    repo = BookRepository(db)
+    created, skipped = [], []
+
+    for row in reader:
+        # @classmethod — tạo BookCreate từ CSV row thay vì BookCreate(title=..., ...)
+        book_in = BookCreate.from_csv_row(row)
+        if repo.exists_by_title(book_in.title):
+            skipped.append(book_in.title)
+            continue
+        repo.create(**book_in.model_dump())
+        created.append(book_in.title)
+
+    return {
+        "created": len(created),
+        "skipped": len(skipped),
+        "created_titles": created,
+        "skipped_titles": skipped,
+    }
 
 
 @router.get("/{book_id}", response_model=BookSchema)

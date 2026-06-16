@@ -5,16 +5,61 @@ from app.repositories.base import BaseRepository
 
 
 class BookRepository(BaseRepository[Book]):
-    """Repository cho Book — kế thừa CRUD từ BaseRepository.
-
-    Thêm các method đặc thù: search, exists_by_title.
-    """
+    """Repository cho Book — kế thừa CRUD từ BaseRepository."""
 
     def __init__(self, db: Session):
         super().__init__(model=Book, db=db)
 
+    # ── @staticmethod ──────────────────────────────────────────────────────
+    #
+    # Dùng khi: logic thuộc về class về mặt ý nghĩa,
+    #           nhưng không cần self (instance) hay cls (class).
+    #           Chỉ xử lý input → output thuần túy.
+    #
+    # Gọi qua class:    BookRepository.normalize_title("  clean code  ")
+    # Gọi qua instance: repo.normalize_title("  clean code  ")   (cả 2 đều được)
+
+    @staticmethod
+    def normalize_title(title: str) -> str:
+        """Chuẩn hóa title — strip khoảng trắng, Title Case.
+
+        "  clean code  " → "Clean Code"
+        "the pragmatic programmer" → "The Pragmatic Programmer"
+
+        @staticmethod vì:
+        - Không cần self.db hay self.model
+        - Không cần cls
+        - Chỉ là string utility thuộc về domain Book
+        """
+        return title.strip().title()
+
+    @staticmethod
+    def is_valid_year(year: int | None) -> bool:
+        """Validate published_year hợp lệ.
+
+        Thêm @staticmethod thứ 2 để thấy pattern rõ hơn:
+        - Không cần DB, không cần instance
+        - Logic validation thuộc về Book domain
+        """
+        if year is None:
+            return True
+        return 1000 <= year <= 2100
+
+    # ── Methods dùng @staticmethod bên trong ──────────────────────────────
+
+    def create(self, **data) -> Book:
+        """Override create — normalize title và validate year trước khi lưu."""
+        if "title" in data:
+            # Gọi staticmethod qua class name — rõ ràng hơn gọi qua self
+            data["title"] = BookRepository.normalize_title(data["title"])
+        if not BookRepository.is_valid_year(data.get("published_year")):
+            raise ValueError(f"published_year không hợp lệ: {data['published_year']}")
+        return super().create(**data)
+
     def get_by_title(self, title: str) -> Book | None:
-        return self.db.query(Book).filter(Book.title == title).first()
+        # normalize trước khi query — tránh miss do khoảng trắng hay case
+        normalized = BookRepository.normalize_title(title)
+        return self.db.query(Book).filter(Book.title == normalized).first()
 
     def exists_by_title(self, title: str) -> bool:
         return self.get_by_title(title) is not None
