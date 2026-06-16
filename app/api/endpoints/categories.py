@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
 from app.models import Category
 from app.schemas.category import CategoryCreate, CategoryUpdate, Category as CategorySchema
-from app.api.deps import get_db
+from app.api.deps import get_db, get_or_404, save_to_db
 from sqlalchemy.orm import Session
+
 router = APIRouter()
 
 @router.get("/", response_model=List[CategorySchema])
@@ -59,14 +60,21 @@ def update_category(category_id: int, category_in: CategoryUpdate, db: Session =
     if not category:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
     
-    if category_in.name is not None:
-        category.name = category_in.name
-    if category_in.description is not None:
-        category.description = category_in.description
-    
+    # dict comprehension — lọc chỉ lấy fields được gửi lên (exclude_unset)
+    # thay vì:
+    #   if category_in.name is not None: category.name = category_in.name
+    #   if category_in.description is not None: category.description = category_in.description
+    #
+    # dict comprehension xây dict rồi loop 1 lần:
+    #   {"name": "Fiction"} nếu chỉ gửi name
+    #   {"name": "X", "description": "Y"} nếu gửi cả 2
+    updates = {k: v for k, v in category_in.model_dump(exclude_unset=True).items()}
+    for field, value in updates.items():
+        setattr(category, field, value)
+
     db.commit()
-    db.refresh(category)  # Làm mới instance để lấy dữ liệu đã được cập nhật
-    return category   
+    db.refresh(category)
+    return category
 
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_category(category_id: int, db: Session = Depends(get_db)):
