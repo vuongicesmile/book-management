@@ -60,16 +60,11 @@ def update_category(category_id: int, category_in: CategoryUpdate, db: Session =
     if not category:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Category not found")
     
-    # dict comprehension — lọc chỉ lấy fields được gửi lên (exclude_unset)
-    # thay vì:
+    # exclude_unset=True — chỉ lấy fields client gửi lên, bỏ qua fields không gửi
+    # thay vì if thủ công từng field:
     #   if category_in.name is not None: category.name = category_in.name
     #   if category_in.description is not None: category.description = category_in.description
-    #
-    # dict comprehension xây dict rồi loop 1 lần:
-    #   {"name": "Fiction"} nếu chỉ gửi name
-    #   {"name": "X", "description": "Y"} nếu gửi cả 2
-    updates = {k: v for k, v in category_in.model_dump(exclude_unset=True).items()}
-    for field, value in updates.items():
+    for field, value in category_in.model_dump(exclude_unset=True).items():
         setattr(category, field, value)
 
     db.commit()
