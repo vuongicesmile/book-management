@@ -1,33 +1,48 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from typing import List
 
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_db, get_or_404, save_to_db
+from app.core.decorators import log_duration, validate_pagination
 from app.models import Author, Book, Category
 from app.schemas.book import BookCreate, BookUpdate, Book as BookSchema
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
 @router.get("/", response_model=List[BookSchema])
+@log_duration           # decorator 1 — log thời gian chạy
+@validate_pagination()  # decorator 2 — validate skip/limit
 def list_books(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    """Lấy danh sách tất cả books, hỗ trợ phân trang."""
+    """Lấy danh sách tất cả books, hỗ trợ phân trang.
+
+    Thứ tự decorator: từ dưới lên trên khi wrap, từ trên xuống khi chạy.
+        @log_duration
+        @validate_pagination()
+        def list_books(...)
+
+        # Python dịch thành:
+        list_books = log_duration(validate_pagination()(list_books))
+        # Khi gọi:
+        #   1. log_duration.wrapper chạy → bắt đầu đếm giờ
+        #   2. validate_pagination.wrapper chạy → check limit/skip
+        #   3. list_books gốc chạy → query DB
+        #   2. validate_pagination.wrapper trả kết quả
+        #   1. log_duration.wrapper log duration → trả kết quả
+    """
     return db.query(Book).offset(skip).limit(limit).all()
 
 
 @router.get("/search", response_model=List[BookSchema])
+@log_duration
 def search_books(q: str, db: Session = Depends(get_db)):
     """Tìm kiếm books theo title hoặc description.
 
     List comprehension — lọc kết quả từ DB theo query string.
-    Thay vì viết vòng for + if thủ công:
-        results = []
-        for book in books:
-            if q in book.title:
-                results.append(book)
-
-    List comprehension viết gọn hơn và trả về list trực tiếp.
     """
     books = db.query(Book).all()
     q_lower = q.lower()
@@ -39,15 +54,12 @@ def search_books(q: str, db: Session = Depends(get_db)):
 
 
 @router.get("/stats")
+@log_duration
 def book_stats(db: Session = Depends(get_db)):
     """Thống kê tổng quan books.
 
-    Set comprehension — lấy unique values, tự động loại trùng:
-        {b.published_year for b in books}  → {2020, 2021, 2023} không có duplicate
-
-    Dict comprehension — xây dict từ iterable:
-        {key: value for item in iterable}
-        → {"Fiction": 5, "Science": 3, ...}
+    Set comprehension — unique values, tự động loại trùng.
+    Dict comprehension — xây dict từ iterable.
     """
     books = db.query(Book).all()
 
@@ -60,7 +72,7 @@ def book_stats(db: Session = Depends(get_db)):
     # dict comprehension — đếm số sách theo category_id
     books_per_category = {
         cat_id: len([b for b in books if b.category_id == cat_id])
-        for cat_id in {b.category_id for b in books}  # set làm key để không bị trùng
+        for cat_id in {b.category_id for b in books}
     }
 
     return {
@@ -71,29 +83,55 @@ def book_stats(db: Session = Depends(get_db)):
     }
 
 
+# ── Generator endpoints ────────────────────────────────────────────────────
+
 def _iter_book_titles(db: Session):
-    """Generator — yield từng title thay vì load hết vào RAM.
+    """Generator — yield từng title, không load hết vào RAM.
 
-    Bình thường:  titles = [b.title for b in db.query(Book).all()]
-                  → load toàn bộ 100.000 books vào RAM cùng lúc
-
-    Generator:    yield b.title từng cái một
-                  → chỉ dùng RAM cho 1 book tại 1 thời điểm
-                  → yield_per(100) = fetch 100 rows/lần từ DB, không phải tất cả
-
-    Hữu ích khi dataset lớn hoặc stream response.
+    yield_per(100): fetch 100 rows/lần từ DB thay vì toàn bộ.
     """
     for book in db.query(Book).yield_per(100):
         yield book.title
 
 
+def _iter_books_as_csv(db: Session):
+    """Generator — stream CSV từng dòng.
+
+    Thay vì build toàn bộ string rồi trả:
+        content = "id,title,...\\n"
+        for book in books:
+            content += f"{book.id},..."   # RAM tăng dần
+
+    Generator yield từng dòng — RAM gần như không tăng dù có triệu books.
+    """
+    yield "id,title,author_id,category_id,published_year\n"
+    for book in db.query(Book).yield_per(100):
+        yield f"{book.id},{book.title},{book.author_id},{book.category_id},{book.published_year or ''}\n"
+
+
 @router.get("/export/titles")
+@log_duration
 def export_titles(db: Session = Depends(get_db)):
-    """Export danh sách titles dùng generator để tiết kiệm RAM."""
-    # generator expression — lazy evaluation, chỉ tính khi cần
+    """Export danh sách titles dùng generator."""
     titles = list(_iter_book_titles(db))
     return {"total": len(titles), "titles": titles}
 
+
+@router.get("/export/csv")
+def export_csv(db: Session = Depends(get_db)):
+    """Stream CSV response dùng generator — không buffer toàn bộ trong RAM.
+
+    StreamingResponse nhận generator, gửi từng chunk xuống client ngay khi có.
+    Client nhận được dữ liệu trước khi server xử lý xong toàn bộ.
+    """
+    return StreamingResponse(
+        _iter_books_as_csv(db),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=books.csv"},
+    )
+
+
+# ── CRUD endpoints ─────────────────────────────────────────────────────────
 
 @router.get("/{book_id}", response_model=BookSchema)
 def get_book(book_id: int, db: Session = Depends(get_db)):
@@ -103,7 +141,7 @@ def get_book(book_id: int, db: Session = Depends(get_db)):
 
 @router.post("/", response_model=BookSchema, status_code=status.HTTP_201_CREATED)
 def create_book(book_in: BookCreate, db: Session = Depends(get_db)):
-    """Tạo mới một book. Trả về 400 nếu title đã tồn tại hoặc author/category không hợp lệ."""
+    """Tạo mới một book."""
     if db.query(Book).filter(Book.title == book_in.title).first():
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -116,7 +154,7 @@ def create_book(book_in: BookCreate, db: Session = Depends(get_db)):
 
 @router.put("/{book_id}", response_model=BookSchema)
 def update_book(book_id: int, book_in: BookUpdate, db: Session = Depends(get_db)):
-    """Cập nhật thông tin một book. Trả về 404 nếu không tồn tại."""
+    """Cập nhật thông tin một book."""
     book = get_or_404(db, Book, id=book_id)
     for field, value in book_in.model_dump(exclude_unset=True).items():
         setattr(book, field, value)
@@ -127,7 +165,7 @@ def update_book(book_id: int, book_in: BookUpdate, db: Session = Depends(get_db)
 
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_book(book_id: int, db: Session = Depends(get_db)):
-    """Xóa một book. Trả về 404 nếu không tồn tại."""
+    """Xóa một book."""
     book = get_or_404(db, Book, id=book_id)
     db.delete(book)
     db.commit()
