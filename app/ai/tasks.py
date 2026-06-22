@@ -1,12 +1,7 @@
-"""Raw API calls tới OpenAI — tầng thấp nhất.
+"""Raw API calls tới OpenAI — tầng thấp nhất, không có business logic.
 
-Pattern từ vuonglearning: ai_proxy/tasks.py chứa _call_task(), generate_title(), v.v.
-Đây là nơi DUY NHẤT gọi HTTP tới OpenAI API — service.py không gọi trực tiếp.
-
-Nguyên tắc:
-  - Mỗi function chỉ làm 1 việc: gọi API và trả về raw result
-  - Không có business logic ở đây
-  - Error handling tối giản — raise lên cho service.py xử lý
+Đây là nơi DUY NHẤT gọi HTTP tới OpenAI. service.py không gọi trực tiếp.
+Mọi giá trị cấu hình (URL, timeout, model, temperature) lấy từ settings — không hardcode.
 """
 from __future__ import annotations
 
@@ -21,79 +16,81 @@ logger = logging.getLogger(__name__)
 
 
 class AINotConfiguredError(Exception):
-    """Raise khi OPENAI_API_KEY chưa được set."""
-    pass
+    """Raise khi openai_api_key chưa được set trong .env."""
 
 
 def _check_api_key() -> None:
-    if not settings.OPENAI_API_KEY:
+    if not settings.openai_api_key:
         raise AINotConfiguredError(
             "OPENAI_API_KEY chưa được cấu hình. Thêm vào .env: OPENAI_API_KEY=sk-..."
         )
 
 
 def _auth_headers() -> dict[str, str]:
-    """Build Authorization header — giống vuonglearning's _upstream_headers()."""
-    return {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
+    return {"Authorization": f"Bearer {settings.openai_api_key}"}
 
 
-async def _call_chat(prompt: str, max_tokens: int = 300, temperature: float = 0.7) -> str:
-    """Gọi OpenAI chat/completions và trả về text response.
+async def _call_chat(
+    prompt: str,
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+) -> str:
+    """Gọi chat/completions, trả về text.
 
-    Pattern từ vuonglearning: tasks.py/_call_task() gọi ai-service /task/chat/completions.
-    Ở đây gọi thẳng OpenAI vì không có ai-service layer.
+    max_tokens  — default: settings.openai_max_tokens_default
+    temperature — default: settings.openai_temperature_default
     """
     _check_api_key()
+    _max_tokens = max_tokens if max_tokens is not None else settings.openai_max_tokens_default
+    _temperature = temperature if temperature is not None else settings.openai_temperature_default
 
-    logger.info("ai.tasks.chat_call", extra={"model": settings.OPENAI_MODEL, "max_tokens": max_tokens})
+    logger.info("ai.tasks.chat_call", extra={"model": settings.openai_chat_model, "max_tokens": _max_tokens})
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            "https://api.openai.com/v1/chat/completions",
+            settings.openai_chat_completions_url,  # từ config, không hardcode
             headers=_auth_headers(),
             json={
-                "model": settings.OPENAI_MODEL,
+                "model": settings.openai_chat_model,
                 "messages": [{"role": "user", "content": prompt}],
-                "max_tokens": max_tokens,
-                "temperature": temperature,
+                "max_tokens": _max_tokens,
+                "temperature": _temperature,
             },
-            timeout=30.0,
+            timeout=settings.openai_chat_timeout,  # từ config
         )
         response.raise_for_status()
 
     data = response.json()
-    result = data["choices"][0]["message"]["content"].strip()
-
     logger.info("ai.tasks.chat_done", extra={"tokens_used": data.get("usage", {}).get("total_tokens")})
-    return result
+    return data["choices"][0]["message"]["content"].strip()
 
 
 async def _call_chat_json(
     prompt: str,
-    max_tokens: int = 300,
-    temperature: float = 0.2,
+    max_tokens: int | None = None,
 ) -> dict:
-    """Tier 2: json_object mode — đảm bảo output luôn parse được.
+    """Tier 2: json_object mode — đảm bảo output parse được.
 
-    Bài 119 Structured Output: prompt PHẢI chứa chữ "JSON" — OpenAI enforce.
-    Trả về dict, không phải string. Dùng khi schema linh hoạt.
+    Prompt PHẢI chứa chữ "JSON" — OpenAI enforce điều này.
+    temperature lấy từ settings.openai_temperature_json (default 0.2).
     """
     _check_api_key()
+    _max_tokens = max_tokens if max_tokens is not None else settings.openai_max_tokens_default
 
-    logger.info("ai.tasks.json_call", extra={"model": settings.OPENAI_MODEL, "max_tokens": max_tokens})
+    logger.info("ai.tasks.json_call", extra={"model": settings.openai_chat_model, "max_tokens": _max_tokens})
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            "https://api.openai.com/v1/chat/completions",
+            settings.openai_chat_completions_url,
             headers=_auth_headers(),
             json={
-                "model": settings.OPENAI_MODEL,
+                "model": settings.openai_chat_model,
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
-                "max_tokens": max_tokens,
-                "temperature": temperature,
+                "max_tokens": _max_tokens,
+                "temperature": settings.openai_temperature_json,
             },
-            timeout=30.0,
+            timeout=settings.openai_chat_timeout,
         )
         response.raise_for_status()
 
@@ -105,30 +102,30 @@ async def _call_chat_json(
 async def _call_chat_schema(
     prompt: str,
     schema: dict,
-    max_tokens: int = 300,
+    max_tokens: int | None = None,
 ) -> dict:
-    """Tier 3: json_schema strict — output bắt buộc đúng schema, không sai được.
+    """Tier 3: json_schema strict — output bắt buộc đúng schema.
 
-    Bài 119 Structured Output: dùng với pydantic_to_openai_schema() helper.
-    temperature=0 vì strict schema → cần deterministic nhất.
-    Luôn check finish_reason == "refusal" trước khi parse.
+    temperature lấy từ settings.openai_temperature_schema (default 0.0).
+    Luôn check finish_reason == "refusal" — model có thể từ chối.
     """
     _check_api_key()
+    _max_tokens = max_tokens if max_tokens is not None else settings.openai_max_tokens_default
 
-    logger.info("ai.tasks.schema_call", extra={"model": settings.OPENAI_MODEL})
+    logger.info("ai.tasks.schema_call", extra={"model": settings.openai_chat_model})
 
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            "https://api.openai.com/v1/chat/completions",
+            settings.openai_chat_completions_url,
             headers=_auth_headers(),
             json={
-                "model": settings.OPENAI_MODEL,
+                "model": settings.openai_chat_model,
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": schema,
-                "max_tokens": max_tokens,
-                "temperature": 0.0,
+                "max_tokens": _max_tokens,
+                "temperature": settings.openai_temperature_schema,
             },
-            timeout=30.0,
+            timeout=settings.openai_chat_timeout,
         )
         response.raise_for_status()
 
@@ -142,24 +139,42 @@ async def _call_chat_schema(
     return json.loads(choice["message"]["content"])
 
 
-def pydantic_to_openai_schema(model_class: type, name: str) -> dict:
-    """Tự động tạo OpenAI json_schema response_format từ Pydantic model.
+async def _call_embedding(text: str) -> list[float]:
+    """Gọi embeddings, trả về vector list[float] 1536 chiều."""
+    _check_api_key()
 
-    Dùng kết hợp với _call_chat_schema():
+    logger.info("ai.tasks.embedding_call", extra={"model": settings.openai_embedding_model, "text_len": len(text)})
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            settings.openai_embeddings_url,          # từ config
+            headers=_auth_headers(),
+            json={
+                "model": settings.openai_embedding_model,
+                "input": text,
+            },
+            timeout=settings.openai_embedding_timeout,  # từ config, tách riêng với chat
+        )
+        response.raise_for_status()
+
+    data = response.json()
+    embedding = data["data"][0]["embedding"]
+
+    logger.info("ai.tasks.embedding_done", extra={"dimensions": len(embedding)})
+    return embedding
+
+
+def pydantic_to_openai_schema(model_class: type, name: str) -> dict:
+    """Tạo OpenAI json_schema response_format từ Pydantic model.
+
+    Ví dụ:
         schema = pydantic_to_openai_schema(BookAnalysis, "book_analysis")
         result = await _call_chat_schema(prompt, schema)
         book = BookAnalysis.model_validate(result)
     """
-    schema = model_class.model_json_schema()
-    _add_additional_properties_false(schema)
-    return {
-        "type": "json_schema",
-        "json_schema": {
-            "name": name,
-            "strict": True,
-            "schema": schema,
-        },
-    }
+    raw = model_class.model_json_schema()
+    _add_additional_properties_false(raw)
+    return {"type": "json_schema", "json_schema": {"name": name, "strict": True, "schema": raw}}
 
 
 def _add_additional_properties_false(schema: dict) -> None:
@@ -170,32 +185,3 @@ def _add_additional_properties_false(schema: dict) -> None:
         _add_additional_properties_false(value)
     for item in schema.get("anyOf", []) + schema.get("allOf", []):
         _add_additional_properties_false(item)
-
-
-async def _call_embedding(text: str) -> list[float]:
-    """Gọi OpenAI embeddings và trả về vector list[float].
-
-    Pattern từ vuonglearning: ai-service gọi /task/embeddings.
-    text-embedding-3-small → vector 1536 chiều.
-    """
-    _check_api_key()
-
-    logger.info("ai.tasks.embedding_call", extra={"model": settings.OPENAI_EMBEDDING_MODEL, "text_len": len(text)})
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://api.openai.com/v1/embeddings",
-            headers=_auth_headers(),
-            json={
-                "model": settings.OPENAI_EMBEDDING_MODEL,
-                "input": text,
-            },
-            timeout=30.0,
-        )
-        response.raise_for_status()
-
-    data = response.json()
-    embedding = data["data"][0]["embedding"]
-
-    logger.info("ai.tasks.embedding_done", extra={"dimensions": len(embedding)})
-    return embedding
