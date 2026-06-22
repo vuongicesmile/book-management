@@ -10,6 +10,7 @@ Nguyên tắc:
 """
 from __future__ import annotations
 
+import json
 import logging
 
 import httpx
@@ -65,6 +66,110 @@ async def _call_chat(prompt: str, max_tokens: int = 300, temperature: float = 0.
 
     logger.info("ai.tasks.chat_done", extra={"tokens_used": data.get("usage", {}).get("total_tokens")})
     return result
+
+
+async def _call_chat_json(
+    prompt: str,
+    max_tokens: int = 300,
+    temperature: float = 0.2,
+) -> dict:
+    """Tier 2: json_object mode — đảm bảo output luôn parse được.
+
+    Bài 119 Structured Output: prompt PHẢI chứa chữ "JSON" — OpenAI enforce.
+    Trả về dict, không phải string. Dùng khi schema linh hoạt.
+    """
+    _check_api_key()
+
+    logger.info("ai.tasks.json_call", extra={"model": settings.OPENAI_MODEL, "max_tokens": max_tokens})
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=_auth_headers(),
+            json={
+                "model": settings.OPENAI_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "max_tokens": max_tokens,
+                "temperature": temperature,
+            },
+            timeout=30.0,
+        )
+        response.raise_for_status()
+
+    data = response.json()
+    logger.info("ai.tasks.json_done", extra={"tokens_used": data.get("usage", {}).get("total_tokens")})
+    return json.loads(data["choices"][0]["message"]["content"])
+
+
+async def _call_chat_schema(
+    prompt: str,
+    schema: dict,
+    max_tokens: int = 300,
+) -> dict:
+    """Tier 3: json_schema strict — output bắt buộc đúng schema, không sai được.
+
+    Bài 119 Structured Output: dùng với pydantic_to_openai_schema() helper.
+    temperature=0 vì strict schema → cần deterministic nhất.
+    Luôn check finish_reason == "refusal" trước khi parse.
+    """
+    _check_api_key()
+
+    logger.info("ai.tasks.schema_call", extra={"model": settings.OPENAI_MODEL})
+
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=_auth_headers(),
+            json={
+                "model": settings.OPENAI_MODEL,
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": schema,
+                "max_tokens": max_tokens,
+                "temperature": 0.0,
+            },
+            timeout=30.0,
+        )
+        response.raise_for_status()
+
+    data = response.json()
+    choice = data["choices"][0]
+
+    if choice.get("finish_reason") == "refusal":
+        raise ValueError(f"Model từ chối: {choice['message'].get('refusal')}")
+
+    logger.info("ai.tasks.schema_done", extra={"tokens_used": data.get("usage", {}).get("total_tokens")})
+    return json.loads(choice["message"]["content"])
+
+
+def pydantic_to_openai_schema(model_class: type, name: str) -> dict:
+    """Tự động tạo OpenAI json_schema response_format từ Pydantic model.
+
+    Dùng kết hợp với _call_chat_schema():
+        schema = pydantic_to_openai_schema(BookAnalysis, "book_analysis")
+        result = await _call_chat_schema(prompt, schema)
+        book = BookAnalysis.model_validate(result)
+    """
+    schema = model_class.model_json_schema()
+    _add_additional_properties_false(schema)
+    return {
+        "type": "json_schema",
+        "json_schema": {
+            "name": name,
+            "strict": True,
+            "schema": schema,
+        },
+    }
+
+
+def _add_additional_properties_false(schema: dict) -> None:
+    """Đệ quy thêm additionalProperties: false — bắt buộc cho strict mode."""
+    if schema.get("type") == "object":
+        schema["additionalProperties"] = False
+    for value in schema.get("properties", {}).values():
+        _add_additional_properties_false(value)
+    for item in schema.get("anyOf", []) + schema.get("allOf", []):
+        _add_additional_properties_false(item)
 
 
 async def _call_embedding(text: str) -> list[float]:
