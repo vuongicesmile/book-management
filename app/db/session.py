@@ -5,8 +5,8 @@ from sqlalchemy.orm import sessionmaker #factory tạo session để tương tá
 from app.core.config import settings # import cấu hình (DB url) từ settings
 
 engine = create_engine(
-  settings.SQLALCHEMY_DATABASE_URL, 
-  connect_args={"check_same_thread": False} if settings.SQLALCHEMY_DATABASE_URL.startswith("sqlite:///") else None
+  settings.database_url, 
+  connect_args={"check_same_thread": False} if settings.database_url.startswith("sqlite:///") else None
 ) # tạo engine kết nối đến db, với SQLite cần thêm connect_args
 
 

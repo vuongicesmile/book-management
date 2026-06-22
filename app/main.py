@@ -20,3 +20,6 @@ app.include_router(books.router, prefix="/books", tags=["Books"])
 app.include_router(authors.router, prefix="/authors", tags=["Authors"])
 app.include_router(categories.router, prefix="/categories", tags=["Categories"])
 app.include_router(ai_router, prefix="/ai", tags=["AI"])
+
+from app.ai.rag.router import router as rag_router
+app.include_router(rag_router, prefix="/ai/rag", tags=["RAG"])

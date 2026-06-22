@@ -61,6 +61,21 @@ class Settings(BaseSettings):
     ai_embed_rate_limit_sleep: float = 0.1      # sleep giữa embedding calls khi batch
     ai_semantic_search_threshold: float = 0.3   # cosine similarity tối thiểu
 
+    # ── RAG — file handling ──────────────────────────────────────────────────
+    rag_upload_dir: str = "uploads"             # thư mục lưu PDF upload
+    rag_chroma_dir: str = ".chroma"             # ChromaDB persistent directory
+
+    # ── RAG — chunking (bài 151) ─────────────────────────────────────────────
+    rag_chunk_size: int = 1000                  # max chars mỗi chunk
+    rag_chunk_overlap: int = 200                # overlap giữa chunks liền kề
+
+    # ── RAG — retrieval (bài 152) ────────────────────────────────────────────
+    rag_retrieval_top_k: int = 4                # số chunks lấy ra khi similarity search
+
+    # ── RAG — token limits ────────────────────────────────────────────────────
+    rag_max_tokens_summarize: int = 600         # tóm tắt từ chunks — nhiều hơn title-based
+    rag_max_tokens_qa: int = 500                # Q&A từ chunks
+
     # ── Derived properties ───────────────────────────────────────────────────
 
     @property
