@@ -1,6 +1,6 @@
 """Prompt templates — tách riêng khỏi logic.
 
-Pattern từ ilmuchat: ai_proxy/prompts.py chứa tất cả prompt strings.
+Pattern từ vuonglearning: ai_proxy/prompts.py chứa tất cả prompt strings.
 Lợi ích:
   - Dễ chỉnh sửa prompt mà không cần đụng vào logic
   - Dễ test từng prompt riêng lẻ

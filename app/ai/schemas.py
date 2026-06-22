@@ -1,6 +1,6 @@
 """Pydantic schemas cho AI module.
 
-Pattern từ ilmuchat: ai_proxy/schemas.py chứa tất cả schemas của module.
+Pattern từ vuonglearning: ai_proxy/schemas.py chứa tất cả schemas của module.
 Không đặt ở app/schemas/ chung — schemas thuộc về module nào thì ở trong module đó.
 """
 from __future__ import annotations

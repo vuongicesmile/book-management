@@ -1,6 +1,6 @@
 """Raw API calls tới OpenAI — tầng thấp nhất.
 
-Pattern từ ilmuchat: ai_proxy/tasks.py chứa _call_task(), generate_title(), v.v.
+Pattern từ vuonglearning: ai_proxy/tasks.py chứa _call_task(), generate_title(), v.v.
 Đây là nơi DUY NHẤT gọi HTTP tới OpenAI API — service.py không gọi trực tiếp.
 
 Nguyên tắc:
@@ -32,14 +32,14 @@ def _check_api_key() -> None:
 
 
 def _auth_headers() -> dict[str, str]:
-    """Build Authorization header — giống ilmuchat's _upstream_headers()."""
+    """Build Authorization header — giống vuonglearning's _upstream_headers()."""
     return {"Authorization": f"Bearer {settings.OPENAI_API_KEY}"}
 
 
 async def _call_chat(prompt: str, max_tokens: int = 300, temperature: float = 0.7) -> str:
     """Gọi OpenAI chat/completions và trả về text response.
 
-    Pattern từ ilmuchat: tasks.py/_call_task() gọi ai-service /task/chat/completions.
+    Pattern từ vuonglearning: tasks.py/_call_task() gọi ai-service /task/chat/completions.
     Ở đây gọi thẳng OpenAI vì không có ai-service layer.
     """
     _check_api_key()
@@ -70,7 +70,7 @@ async def _call_chat(prompt: str, max_tokens: int = 300, temperature: float = 0.
 async def _call_embedding(text: str) -> list[float]:
     """Gọi OpenAI embeddings và trả về vector list[float].
 
-    Pattern từ ilmuchat: ai-service gọi /task/embeddings.
+    Pattern từ vuonglearning: ai-service gọi /task/embeddings.
     text-embedding-3-small → vector 1536 chiều.
     """
     _check_api_key()

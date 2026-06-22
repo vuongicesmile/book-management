@@ -1,12 +1,12 @@
 """AI router — thin HTTP layer, chỉ gọi service functions.
 
-Pattern từ ilmuchat: ai_proxy/router.py imports từ schemas, service, tasks.
+Pattern từ vuonglearning: ai_proxy/router.py imports từ schemas, service, tasks.
 Router không chứa business logic — chỉ:
   1. Parse HTTP request
   2. Gọi service function
   3. Return response
 
-So sánh với ilmuchat router.py:
+So sánh với vuonglearning router.py:
   router.py → service.proxy_chat_completion(body, user, request)
   (thin)       (toàn bộ logic ở service)
 """

@@ -1,6 +1,6 @@
 """Business logic cho AI module — tầng giữa giữa router và tasks.
 
-Pattern từ ilmuchat: ai_proxy/service.py orchestrate toàn bộ flow.
+Pattern từ vuonglearning: ai_proxy/service.py orchestrate toàn bộ flow.
   router.py  →  service.py  →  tasks.py  →  OpenAI API
   (HTTP)        (logic)         (API call)
 
@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 def _handle_ai_error(e: Exception) -> None:
     """Convert AI errors → HTTP errors có message rõ ràng.
 
-    Pattern từ ilmuchat: error handler tập trung, không scatter qua endpoints.
+    Pattern từ vuonglearning: error handler tập trung, không scatter qua endpoints.
     """
     if isinstance(e, AINotConfiguredError):
         raise HTTPException(status_code=503, detail=str(e))
@@ -142,7 +142,7 @@ async def embed_book(book_id: int, db: Session) -> EmbedBookResponse:
 async def embed_all_books(db: Session) -> EmbedAllResponse:
     """Batch embed tất cả books chưa có embedding.
 
-    Pattern từ ilmuchat: background tasks với asyncio.create_task.
+    Pattern từ vuonglearning: background tasks với asyncio.create_task.
     Dùng asyncio.sleep(0.1) giữa các calls để tránh rate limit.
     """
     repo = BookRepository(db)
