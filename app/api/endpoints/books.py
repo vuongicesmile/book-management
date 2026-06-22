@@ -30,7 +30,7 @@ router = APIRouter()
 # Tại sao async def tốt hơn?
 #   - Không block event loop khi chờ I/O (DB, HTTP, file)
 #   - asyncio.create_task() = coroutine chạy song song, không cần chờ
-#   - Giống hệt pattern ilmuchat dùng trong ai_proxy/service.py
+#   - Giống hệt pattern vuonglearning dùng trong ai_proxy/service.py
 #
 # Lưu ý: DB vẫn là sync SQLAlchemy (SQLite, learning project).
 # Production với PostgreSQL → dùng AsyncSession + await db.execute(...)
@@ -129,7 +129,7 @@ async def create_book(book_in: BookCreate, db: Session = Depends(get_db)):
     book = repo.create(**book_in.model_dump())
 
     # asyncio.create_task() — chạy notify_book_created song song, không chờ
-    # So sánh ilmuchat:
+    # So sánh vuonglearning:
     #   asyncio.create_task(_post_stream_process(chat_id=..., user_id=..., ...))
     asyncio.create_task(notify_book_created(book.id, book.title, book.author_id))
 

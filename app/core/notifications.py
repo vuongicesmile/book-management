@@ -1,9 +1,9 @@
 """Background notification tasks cho book management.
 
-Dùng async def để có thể gọi qua asyncio.create_task() — giống ilmuchat.
+Dùng async def để có thể gọi qua asyncio.create_task() — giống vuonglearning.
 
-ilmuchat (ai_proxy/service.py):
-    task = asyncio.create_task(_post_stream_process(...))
+vuonglearning pattern:
+    task = asyncio.create_task(notify_func(...))
 
 book-management:
     asyncio.create_task(notify_book_created(...))
