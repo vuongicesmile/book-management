@@ -13,8 +13,9 @@ def read_root():
 
 
 # đăng ký các router từ các module con
-from app.api.endpoints import books, authors, categories
+from app.api.endpoints import books, authors, categories, ai
 
 app.include_router(books.router, prefix="/books", tags=["Books"])
 app.include_router(authors.router, prefix="/authors", tags=["Authors"])
 app.include_router(categories.router, prefix="/categories", tags=["Categories"])
+app.include_router(ai.router, prefix="/ai", tags=["AI"])

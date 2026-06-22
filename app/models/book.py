@@ -1,8 +1,9 @@
-from sqlalchemy import Column, Integer, String, Text , ForeignKey
+from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
 
 from app.db.base import Base
+
+
 class Book(Base):
     __tablename__ = "books"
 
@@ -12,6 +13,11 @@ class Book(Base):
     published_year = Column(Integer, nullable=True)
     author_id = Column(Integer, ForeignKey("authors.id", ondelete="RESTRICT"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id", ondelete="RESTRICT"), nullable=False)
+
+    # Bài 108: Lưu vector embedding dưới dạng JSON string trong SQLite.
+    # SQLite không có kiểu vector native → dùng Text, serialize/deserialize bằng json.
+    # Production với PostgreSQL → dùng pgvector extension (kiểu VECTOR(1536)).
+    embedding = Column(Text, nullable=True)
 
     author = relationship("Author", back_populates="books")
     category = relationship("Category", back_populates="books")

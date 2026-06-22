@@ -1,43 +1,26 @@
-from pydantic import BaseModel
+"""Config dùng pydantic-settings — đọc từ .env tự động.
+
+Bài 100 Best Practice: config tập trung, không hardcode giá trị trong code.
+pydantic-settings = pydantic + đọc env vars / .env file.
+"""
+from __future__ import annotations
+
+from pydantic_settings import BaseSettings
 
 
-class Settings(BaseModel):
-    PROJECT_NAME: str = "Book management API"
-
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "Book Management API"
     SQLALCHEMY_DATABASE_URL: str = "sqlite:///./app.db"
 
-settings = Settings() # tạo 1 inctance của class Settings để có thể truy cập vào các biến cấu hình trong ứng dụng cho toàn appp
+    # OpenAI API key — đọc từ env var OPENAI_API_KEY hoặc file .env
+    # Nếu không set → AI features trả về lỗi rõ ràng thay vì crash
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o-mini"
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-small"
+
+    class Config:
+        env_file = ".env"
+        extra = "ignore"
 
 
-# ---
-#   Tại sao dùng Pydantic thay vì dict thông thường?
-
-#   # Cách thường (không an toàn)
-#   config = {
-#       "PROJECT_NAME": "Book API",
-#       "PORT": "abc"  # sai kiểu, không ai báo lỗi
-#   }
-
-#   # Pydantic (type-safe)
-#   class Settings(BaseModel):
-#       PORT: int = 8000
-
-#   Settings(PORT="abc")  # → ValidationError ngay lập tức
-
-#   ---
-#   Thực tế nên dùng pydantic-settings để đọc từ file .env:
-
-#   from pydantic_settings import BaseSettings
-
-#   class Settings(BaseSettings):
-#       PROJECT_NAME: str = "Book management API"
-#       SQLALCHEMY_DATABASE_URL: str = "sqlite:///./app.db"
-
-#       class Config:
-#           env_file = ".env"  # đọc từ .env nếu có
-
-#   settings = Settings()
-
-#   Lúc đó bạn có thể tạo file .env:
-#   SQLALCHEMY_DATABASE_URL=postgresql://user:pass@localhos
-#   t/bookdb
+settings = Settings()

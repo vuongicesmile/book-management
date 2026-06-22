@@ -95,3 +95,25 @@ class BookRepository(BaseRepository[Book]):
         yield "id,title,author_id,category_id,published_year\n"
         for book in self.db.query(Book).yield_per(100):
             yield f"{book.id},{book.title},{book.author_id},{book.category_id},{book.published_year or ''}\n"
+
+    # ── Embedding methods (Bài 108) ────────────────────────────────────────
+
+    def save_embedding(self, book_id: int, embedding_json: str) -> Book:
+        """Lưu embedding JSON vào column embedding của book."""
+        book = self.get_by_id(book_id)
+        book.embedding = embedding_json
+        self.db.commit()
+        self.db.refresh(book)
+        return book
+
+    def get_books_with_embedding(self) -> list[Book]:
+        """Lấy tất cả books đã có embedding — dùng cho semantic search."""
+        return self.db.query(Book).filter(Book.embedding.isnot(None)).all()
+
+    def update_description(self, book_id: int, description: str) -> Book:
+        """Cập nhật description của book (dùng sau khi AI generate)."""
+        book = self.get_by_id(book_id)
+        book.description = description
+        self.db.commit()
+        self.db.refresh(book)
+        return book
