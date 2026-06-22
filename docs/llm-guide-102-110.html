@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LLM Deep Dive — Bài 102–110</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0f1117; color: #e2e8f0; line-height: 1.7; }
+  .hero { background: linear-gradient(135deg, #1a1f2e 0%, #0f1117 100%); border-bottom: 1px solid #2d3748; padding: 48px 32px 40px; text-align: center; }
+  .hero h1 { font-size: 2.2rem; font-weight: 700; color: #fff; margin-bottom: 8px; }
+  .hero p { color: #94a3b8; font-size: 1rem; }
+  .badge { display: inline-block; background: #6366f1; color: #fff; font-size: 0.75rem; font-weight: 600; padding: 2px 10px; border-radius: 99px; margin-bottom: 16px; letter-spacing: 0.05em; }
+  .container { max-width: 900px; margin: 0 auto; padding: 40px 24px; }
+  .lesson { background: #1a1f2e; border: 1px solid #2d3748; border-radius: 12px; margin-bottom: 32px; overflow: hidden; }
+  .lesson-header { padding: 20px 24px 16px; border-bottom: 1px solid #2d3748; display: flex; align-items: center; gap: 14px; }
+  .lesson-num { background: #6366f1; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 3px 10px; border-radius: 6px; white-space: nowrap; }
+  .lesson-header h2 { font-size: 1.15rem; font-weight: 600; color: #f1f5f9; }
+  .lesson-body { padding: 20px 24px 24px; }
+  .lesson-body p { color: #cbd5e1; margin-bottom: 12px; font-size: 0.95rem; }
+  h3 { font-size: 0.85rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #818cf8; margin: 20px 0 10px; }
+  pre { background: #0d1117; border: 1px solid #2d3748; border-radius: 8px; padding: 16px; overflow-x: auto; font-size: 0.82rem; line-height: 1.6; margin: 12px 0; }
+  code { color: #a5f3fc; font-family: 'JetBrains Mono', 'Fira Code', monospace; }
+  .comment { color: #6b7280; }
+  .kw { color: #c084fc; }
+  .str { color: #86efac; }
+  .num { color: #fbbf24; }
+  .fn { color: #60a5fa; }
+  .diagram { background: #0d1117; border: 1px solid #374151; border-radius: 8px; padding: 16px; font-family: monospace; font-size: 0.8rem; color: #94a3b8; overflow-x: auto; margin: 12px 0; white-space: pre; line-height: 1.6; }
+  .analogy { background: #1e1b4b; border-left: 3px solid #818cf8; border-radius: 0 8px 8px 0; padding: 12px 16px; margin: 14px 0; font-size: 0.9rem; color: #c7d2fe; }
+  .analogy strong { color: #a5b4fc; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  @media (max-width: 600px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { background: #0d1117; border: 1px solid #2d3748; border-radius: 8px; padding: 14px; }
+  .card-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #64748b; margin-bottom: 6px; }
+  .card-val { font-size: 0.9rem; color: #e2e8f0; }
+  .tag { display: inline-block; background: #1e293b; color: #94a3b8; font-size: 0.72rem; padding: 2px 8px; border-radius: 4px; margin: 2px; border: 1px solid #334155; }
+  .highlight { color: #fbbf24; font-weight: 600; }
+  ul { padding-left: 20px; color: #cbd5e1; font-size: 0.95rem; }
+  ul li { margin-bottom: 6px; }
+  .arrow { color: #6366f1; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <div class="badge">Bài 102 → 110</div>
+  <h1>LLM Deep Dive</h1>
+  <p>Từ lý thuyết đến code Python thực tế — tokenization, embeddings, attention, transformer</p>
+</div>
+
+<div class="container">
+
+<!-- 102 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 102</span>
+    <h2>Understanding Large Language Models (LLMs)</h2>
+  </div>
+  <div class="lesson-body">
+    <p>LLM là model được train trên lượng text khổng lồ để học xác suất của từ tiếp theo. Nó không "hiểu" ngôn ngữ — nó <span class="highlight">dự đoán token tiếp theo</span> dựa trên context.</p>
+
+    <div class="analogy">
+      <strong>Analogy:</strong> LLM giống một người đã đọc toàn bộ internet. Khi bạn hỏi "Thủ đô của Pháp là...", nó biết từ tiếp theo là "Paris" vì đã thấy pattern đó hàng triệu lần trong training data.
+    </div>
+
+    <h3>Cách LLM hoạt động (đơn giản nhất)</h3>
+    <div class="diagram">Input:  "Hôm nay trời"
+           ↓
+    [Tokenize] → [103, 45, 872]
+           ↓
+    [LLM predict next token]
+           ↓
+    Output: "đẹp" (probability: 0.42)
+            "mưa" (probability: 0.31)
+            "nóng" (probability: 0.18)
+            ...
+           ↓
+    Chọn "đẹp" → lặp lại với "Hôm nay trời đẹp"</div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Ví dụ LLMs</div>
+        <div class="card-val">GPT-4, Claude, Gemini, Llama, Mistral</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Training data</div>
+        <div class="card-val">Hàng nghìn tỷ tokens từ web, books, code</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 103 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 103</span>
+    <h2>Deep Dive into the GPT Architecture</h2>
+  </div>
+  <div class="lesson-body">
+    <p>GPT (Generative Pre-trained Transformer) là <span class="highlight">Transformer Decoder</span> — chỉ dùng decoder stack, không có encoder. Sinh text từ trái sang phải.</p>
+
+    <h3>Kiến trúc GPT</h3>
+    <div class="diagram">Input tokens: ["Hôm", "nay", "trời"]
+         ↓
+┌─────────────────────────────┐
+│  Token Embedding            │  "Hôm" → vector [0.2, -0.5, 0.8, ...]
+│  + Positional Encoding      │  + vị trí (position 0, 1, 2)
+└─────────────────────────────┘
+         ↓
+┌─────────────────────────────┐
+│  Transformer Block × N      │  GPT-3: N=96 layers
+│  ┌───────────────────────┐  │
+│  │ Multi-Head Attention  │  │  ← Bài 110
+│  │ Feed Forward Network  │  │
+│  │ Layer Normalization   │  │
+│  └───────────────────────┘  │
+└─────────────────────────────┘
+         ↓
+┌─────────────────────────────┐
+│  Linear + Softmax           │  → probability của 50,000 tokens
+└─────────────────────────────┘
+         ↓
+Output: "đẹp" (pick highest prob)</div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">GPT-3</div>
+        <div class="card-val">175B params, 96 layers, 96 attention heads</div>
+      </div>
+      <div class="card">
+        <div class="card-title">GPT-4</div>
+        <div class="card-val">~1.8T params (ước tính), mixture of experts</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 104 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 104</span>
+    <h2>How LLMs Work Under the Hood?</h2>
+  </div>
+  <div class="lesson-body">
+    <p>2 giai đoạn chính: <span class="highlight">Pre-training</span> (học từ data) và <span class="highlight">Inference</span> (sinh text).</p>
+
+    <h3>Pre-training</h3>
+    <div class="diagram">Data: "The cat sat on the mat"
+   ↓
+Input:  ["The", "cat", "sat", "on",  "the"]
+Target: ["cat", "sat", "on",  "the", "mat"]
+   ↓
+Model predict → compare với target → tính Loss
+   ↓
+Backpropagation → update 175B parameters
+   ↓
+Lặp lại hàng nghìn tỷ lần trên toàn bộ internet</div>
+
+    <h3>Inference (lúc bạn chat)</h3>
+    <pre><code><span class="comment"># Autoregressive generation — sinh từng token một</span>
+<span class="fn">prompt</span> = <span class="str">"Hôm nay trời"</span>
+<span class="fn">tokens</span> = tokenize(prompt)  <span class="comment"># [103, 45, 872]</span>
+
+<span class="kw">while</span> <span class="kw">not</span> is_done:
+    next_token = model.predict(tokens)  <span class="comment"># predict 1 token</span>
+    tokens.append(next_token)           <span class="comment"># thêm vào context</span>
+    <span class="comment"># lặp lại với context dài hơn</span>
+
+<span class="comment"># [103, 45, 872, 201, 55, ...]</span>
+<span class="comment"># "Hôm nay trời đẹp quá ..."</span></code></pre>
+
+    <div class="analogy">
+      <strong>Tại sao gọi là "autoregressive"?</strong> Vì output (token vừa sinh) trở thành input cho bước tiếp theo. Mỗi token được condition trên tất cả tokens trước đó.
+    </div>
+  </div>
+</div>
+
+<!-- 105 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 105</span>
+    <h2>Fundamentals of Tokenization in NLP</h2>
+  </div>
+  <div class="lesson-body">
+    <p>LLM không đọc chữ — nó đọc <span class="highlight">tokens</span> (số nguyên). Tokenization = chuyển text thành list số.</p>
+
+    <h3>Token KHÔNG phải là word</h3>
+    <div class="diagram">"Hello world"  → ["Hello", " world"]         → [9906, 1917]
+"unhappiness"  → ["un", "happ", "iness"]      → [359, 5316, 1885]
+"GPT"          → ["G", "PT"]                  → [38, 2898]
+"🎉"           → ["<0xF0>","<0x9F>","<0x8E>","<0x89>"] → 4 tokens!</div>
+
+    <h3>Byte Pair Encoding (BPE) — thuật toán phổ biến nhất</h3>
+    <div class="diagram">Bước 1: Bắt đầu từng ký tự riêng lẻ
+  "low", "lower", "newest", "widest"
+  → l, o, w, e, r, n, s, t, i, d
+
+Bước 2: Merge cặp xuất hiện nhiều nhất
+  "l"+"o" → "lo"  (xuất hiện 2 lần)
+  "lo"+"w" → "low" (xuất hiện 2 lần)
+
+Bước 3: Lặp lại cho đến khi đủ vocab size (50,000 tokens)</div>
+
+    <h3>Tại sao tokenization quan trọng?</h3>
+    <ul>
+      <li><span class="highlight">Token limit</span>: GPT-4 = 128k tokens context window</li>
+      <li><span class="highlight">Cost</span>: API tính tiền theo token, không phải chữ</li>
+      <li><span class="highlight">Performance</span>: "1+1=2" và "one plus one equals two" có độ dài token khác nhau</li>
+      <li><span class="highlight">Language bias</span>: tiếng Anh hiệu quả hơn tiếng Việt (cùng 1 nghĩa nhưng tiếng Việt dùng nhiều token hơn)</li>
+    </ul>
+  </div>
+</div>
+
+<!-- 106 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 106</span>
+    <h2>Implementing a Custom Tokenizer in Python</h2>
+  </div>
+  <div class="lesson-body">
+    <p>Implement simple tokenizer từ đầu để hiểu cơ chế, sau đó dùng <code>tiktoken</code> (tokenizer thực của OpenAI).</p>
+
+    <h3>Simple word tokenizer</h3>
+    <pre><code><span class="kw">class</span> <span class="fn">SimpleTokenizer</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        self.vocab = {}      <span class="comment"># word → id</span>
+        self.reverse = {}    <span class="comment"># id → word</span>
+        self.next_id = <span class="num">0</span>
+
+    <span class="kw">def</span> <span class="fn">fit</span>(self, texts: list[str]) -> <span class="str">"SimpleTokenizer"</span>:
+        <span class="kw">for</span> text <span class="kw">in</span> texts:
+            <span class="kw">for</span> word <span class="kw">in</span> text.lower().split():
+                <span class="kw">if</span> word <span class="kw">not in</span> self.vocab:
+                    self.vocab[word] = self.next_id
+                    self.reverse[self.next_id] = word
+                    self.next_id += <span class="num">1</span>
+        <span class="kw">return</span> self
+
+    <span class="kw">def</span> <span class="fn">encode</span>(self, text: str) -> list[int]:
+        <span class="kw">return</span> [self.vocab.get(w, <span class="num">-1</span>) <span class="kw">for</span> w <span class="kw">in</span> text.lower().split()]
+
+    <span class="kw">def</span> <span class="fn">decode</span>(self, ids: list[int]) -> str:
+        <span class="kw">return</span> <span class="str">" "</span>.join(self.reverse.get(i, <span class="str">"[UNK]"</span>) <span class="kw">for</span> i <span class="kw">in</span> ids)
+
+<span class="comment"># Dùng thử</span>
+tokenizer = SimpleTokenizer()
+tokenizer.fit([<span class="str">"hôm nay trời đẹp"</span>, <span class="str">"hôm nay trời mưa"</span>])
+
+ids = tokenizer.encode(<span class="str">"hôm nay trời đẹp"</span>)
+<span class="comment"># → [0, 1, 2, 3]</span>
+
+text = tokenizer.decode(ids)
+<span class="comment"># → "hôm nay trời đẹp"</span></code></pre>
+
+    <h3>Dùng tiktoken (tokenizer thực của OpenAI)</h3>
+    <pre><code><span class="comment"># pip install tiktoken</span>
+<span class="kw">import</span> tiktoken
+
+enc = tiktoken.encoding_for_model(<span class="str">"gpt-4"</span>)
+
+<span class="comment"># Encode</span>
+tokens = enc.encode(<span class="str">"Hello, Vuong! How are you?"</span>)
+<span class="comment"># → [9906, 11, 650, 71, 0, 2650, 527, 499, 30]</span>
+print(f<span class="str">"Tokens: {len(tokens)}"</span>)  <span class="comment"># 9 tokens</span>
+
+<span class="comment"># Decode</span>
+text = enc.decode(tokens)
+<span class="comment"># → "Hello, Vuong! How are you?"</span>
+
+<span class="comment"># Đếm token trước khi gửi API (tránh vượt limit)</span>
+<span class="kw">def</span> <span class="fn">count_tokens</span>(text: str, model: str = <span class="str">"gpt-4"</span>) -> int:
+    enc = tiktoken.encoding_for_model(model)
+    <span class="kw">return</span> len(enc.encode(text))</code></pre>
+  </div>
+</div>
+
+<!-- 107 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 107</span>
+    <h2>The Transformer Breakthrough: "Attention is All You Need"</h2>
+  </div>
+  <div class="lesson-body">
+    <p>Paper 2017 của Google. Trước đó AI dùng RNN/LSTM — chậm vì xử lý tuần tự. Transformer xử lý <span class="highlight">song song toàn bộ sequence</span> cùng lúc.</p>
+
+    <div class="analogy">
+      <strong>RNN (cũ):</strong> Đọc sách từng chữ một, ghi nhớ qua "hidden state" — chữ đầu tiên dễ bị quên đến cuối câu.<br><br>
+      <strong>Transformer (mới):</strong> Nhìn tất cả chữ cùng lúc, tính "mức độ liên quan" giữa mọi cặp chữ — nhớ được context dài hơn nhiều.
+    </div>
+
+    <h3>Core idea: Self-Attention</h3>
+    <div class="diagram">Câu: "Con mèo ngồi trên tấm thảm vì nó mệt"
+
+Khi xử lý từ "nó":
+  - "nó" liên quan tới "mèo": 0.92  ← attention cao
+  - "nó" liên quan tới "thảm": 0.03
+  - "nó" liên quan tới "mệt":  0.71  ← attention cao
+
+→ Model hiểu "nó" = "mèo" (không phải "thảm")</div>
+
+    <h3>So sánh RNN vs Transformer</h3>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">RNN/LSTM</div>
+        <div class="card-val">✗ Tuần tự, chậm<br>✗ Quên context dài<br>✗ Khó train song song</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Transformer</div>
+        <div class="card-val">✓ Song song, nhanh<br>✓ Nhớ toàn bộ context<br>✓ Scale được lên hàng tỷ params</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 108 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 108</span>
+    <h2>Deep Diving into Vector Embeddings</h2>
+  </div>
+  <div class="lesson-body">
+    <p>Embedding = chuyển text thành <span class="highlight">vector số</span> trong không gian nhiều chiều. Những thứ có nghĩa tương tự sẽ có vector gần nhau.</p>
+
+    <div class="analogy">
+      <strong>Analogy:</strong> Trên bản đồ, Hà Nội và Hải Phòng gần nhau (đều miền Bắc). Embedding tương tự — "king" và "queen" gần nhau trong vector space vì nghĩa liên quan.
+    </div>
+
+    <h3>Ví dụ nổi tiếng: Word Arithmetic</h3>
+    <div class="diagram">vector("king") - vector("man") + vector("woman") ≈ vector("queen")
+
+vector("Paris") - vector("France") + vector("Vietnam") ≈ vector("Hà Nội")</div>
+
+    <h3>Python: Dùng OpenAI Embeddings</h3>
+    <pre><code><span class="kw">from</span> openai <span class="kw">import</span> OpenAI
+<span class="kw">import</span> numpy <span class="kw">as</span> np
+
+client = OpenAI()
+
+<span class="kw">def</span> <span class="fn">get_embedding</span>(text: str) -> list[float]:
+    response = client.embeddings.create(
+        input=text,
+        model=<span class="str">"text-embedding-3-small"</span>
+    )
+    <span class="kw">return</span> response.data[<span class="num">0</span>].embedding
+    <span class="comment"># → list 1536 số float</span>
+
+<span class="kw">def</span> <span class="fn">cosine_similarity</span>(a: list[float], b: list[float]) -> float:
+    <span class="comment">"""Đo độ tương đồng: 1.0 = giống nhau, 0.0 = khác nhau."""</span>
+    a, b = np.array(a), np.array(b)
+    <span class="kw">return</span> np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+<span class="comment"># Ứng dụng thực: tìm sách tương tự</span>
+books = [
+    <span class="str">"Clean Code - Robert Martin"</span>,
+    <span class="str">"The Pragmatic Programmer"</span>,
+    <span class="str">"Design Patterns - Gang of Four"</span>,
+]
+query = <span class="str">"best practices in software development"</span>
+
+query_emb = get_embedding(query)
+scores = [(book, cosine_similarity(query_emb, get_embedding(book))) <span class="kw">for</span> book <span class="kw">in</span> books]
+scores.sort(key=<span class="kw">lambda</span> x: x[<span class="num">1</span>], reverse=<span class="kw">True</span>)
+<span class="comment"># → [("Clean Code", 0.89), ("Pragmatic...", 0.85), ...]</span></code></pre>
+
+    <h3>Ứng dụng trong book-management</h3>
+    <pre><code><span class="comment"># Semantic search thay vì LIKE '%query%'</span>
+<span class="comment"># Hiện tại: tìm "python web" → bỏ lỡ "FastAPI development"</span>
+<span class="comment"># Với embedding: tìm "python web" → tìm được "FastAPI development"</span>
+<span class="comment"># vì 2 câu này có vector gần nhau trong embedding space</span></code></pre>
+  </div>
+</div>
+
+<!-- 109 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 109</span>
+    <h2>Role of Positional Encodings in Transformers</h2>
+  </div>
+  <div class="lesson-body">
+    <p>Transformer xử lý tất cả tokens song song — nên <span class="highlight">không biết thứ tự</span> mặc định. Positional Encoding thêm thông tin vị trí vào embedding.</p>
+
+    <div class="analogy">
+      <strong>Vấn đề:</strong> "Vuong loves Python" và "Python loves Vuong" có cùng tokens, khác thứ tự — nghĩa hoàn toàn khác.<br>
+      <strong>Giải pháp:</strong> Thêm vector vị trí vào mỗi token — token ở position 0, 1, 2 có "dấu hiệu" khác nhau.
+    </div>
+
+    <h3>Cách hoạt động</h3>
+    <div class="diagram">"Vuong" ở vị trí 0:
+  embedding("Vuong") = [0.2, -0.5, 0.8, ...]
+  pos_encoding(0)    = [0.0,  1.0, 0.0, ...]  ← sin/cos waves
+
+  input = embedding + pos_encoding
+        = [0.2, 0.5, 0.8, ...]  ← token + vị trí
+
+"Python" ở vị trí 2:
+  embedding("Python") = [0.7, 0.3, -0.2, ...]
+  pos_encoding(2)     = [0.9, -0.4, 0.1, ...]  ← khác position 0!
+
+  → Model phân biệt được "Vuong" đứng trước hay sau "Python"</div>
+
+    <h3>Python implementation đơn giản</h3>
+    <pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="kw">def</span> <span class="fn">positional_encoding</span>(seq_len: int, d_model: int) -> np.ndarray:
+    <span class="comment">"""Tạo positional encoding dùng sin/cos waves.</span>
+    <span class="comment">seq_len: độ dài sequence (số tokens)</span>
+    <span class="comment">d_model: kích thước embedding (thường 512 hoặc 768)</span>
+    <span class="comment">"""</span>
+    PE = np.zeros((seq_len, d_model))
+
+    <span class="kw">for</span> pos <span class="kw">in</span> range(seq_len):      <span class="comment"># vị trí token</span>
+        <span class="kw">for</span> i <span class="kw">in</span> range(<span class="num">0</span>, d_model, <span class="num">2</span>):  <span class="comment"># từng cặp chiều</span>
+            PE[pos, i]   = np.sin(pos / (<span class="num">10000</span> ** (i / d_model)))
+            PE[pos, i+<span class="num">1</span>] = np.cos(pos / (<span class="num">10000</span> ** (i / d_model)))
+    <span class="kw">return</span> PE
+
+pe = positional_encoding(seq_len=<span class="num">10</span>, d_model=<span class="num">512</span>)
+<span class="comment"># shape: (10, 512) — 10 positions, mỗi position 512-dim vector</span></code></pre>
+  </div>
+</div>
+
+<!-- 110 -->
+<div class="lesson">
+  <div class="lesson-header">
+    <span class="lesson-num">Bài 110</span>
+    <h2>Understanding Multi-Head Attention</h2>
+  </div>
+  <div class="lesson-body">
+    <p>Thay vì dùng 1 attention, Transformer chạy <span class="highlight">nhiều attention head song song</span> — mỗi head học một loại "mối quan hệ" khác nhau.</p>
+
+    <div class="analogy">
+      <strong>Analogy:</strong> Đọc 1 câu nhưng đặt nhiều câu hỏi khác nhau cùng lúc:<br>
+      → Head 1: "ai là subject?" &nbsp;&nbsp; → Head 2: "có quan hệ thời gian không?" <br>
+      → Head 3: "coreference?" &nbsp;&nbsp;&nbsp;&nbsp; → Head 4: "quan hệ logic?"<br>
+      Mỗi head chuyên về 1 loại, kết hợp lại cho hiểu biết phong phú hơn.
+    </div>
+
+    <h3>Attention là gì? Q, K, V</h3>
+    <div class="diagram">Attention(Q, K, V) = softmax(Q·Kᵀ / √d_k) · V
+
+Q = Query  "tôi đang tìm gì?"
+K = Key    "tôi có thể cung cấp gì?"
+V = Value  "nội dung thực sự"
+
+Ví dụ: "Con mèo [nó] mệt"
+  Query "nó" hỏi: "ai là tôi?"
+  Key "mèo" trả lời: "tôi liên quan đến đại từ"
+  → attention score cao → lấy Value của "mèo"</div>
+
+    <h3>Multi-Head = chạy nhiều attention song song</h3>
+    <pre><code><span class="kw">import</span> numpy <span class="kw">as</span> np
+
+<span class="kw">def</span> <span class="fn">attention</span>(Q, K, V):
+    <span class="comment">"""Single attention head."""</span>
+    d_k = Q.shape[-<span class="num">1</span>]
+    scores = Q @ K.T / np.sqrt(d_k)      <span class="comment"># similarity scores</span>
+    weights = np.exp(scores) / np.exp(scores).sum()  <span class="comment"># softmax</span>
+    <span class="kw">return</span> weights @ V                   <span class="comment"># weighted sum of values</span>
+
+<span class="kw">def</span> <span class="fn">multi_head_attention</span>(X, num_heads=<span class="num">8</span>, d_model=<span class="num">512</span>):
+    <span class="comment">"""8 heads chạy song song, kết quả concat lại."""</span>
+    d_k = d_model // num_heads  <span class="comment"># 512 // 8 = 64 mỗi head</span>
+    outputs = []
+
+    <span class="kw">for</span> head <span class="kw">in</span> range(num_heads):
+        <span class="comment"># Mỗi head có weight riêng (học khác nhau)</span>
+        Q = X @ np.random.randn(d_model, d_k)  <span class="comment"># project xuống 64-dim</span>
+        K = X @ np.random.randn(d_model, d_k)
+        V = X @ np.random.randn(d_model, d_k)
+
+        head_output = attention(Q, K, V)  <span class="comment"># (seq_len, 64)</span>
+        outputs.append(head_output)
+
+    <span class="comment"># Concat 8 heads: (seq_len, 64*8) = (seq_len, 512)</span>
+    <span class="kw">return</span> np.concatenate(outputs, axis=-<span class="num">1</span>)</code></pre>
+
+    <h3>Tại sao Multi-Head tốt hơn Single-Head?</h3>
+    <div class="grid2">
+      <div class="card">
+        <div class="card-title">Single Attention</div>
+        <div class="card-val">1 "góc nhìn" duy nhất<br>Dễ bỏ lỡ pattern phức tạp</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Multi-Head Attention (8 heads)</div>
+        <div class="card-val">8 "góc nhìn" song song<br>Mỗi head học pattern khác nhau<br>Kết quả phong phú hơn nhiều</div>
+      </div>
+    </div>
+
+    <h3>Tổng kết flow đầy đủ</h3>
+    <div class="diagram">Text input
+    ↓ [Bài 105-106] Tokenization
+["Hôm", "nay", "trời"] → [103, 45, 872]
+    ↓ [Bài 108] Token Embedding
+[103, 45, 872] → 3 vectors (512-dim)
+    ↓ [Bài 109] + Positional Encoding
+vectors + position info
+    ↓ [Bài 107, 110] Transformer Block × N
+  Multi-Head Attention (8 heads song song)
+  Feed Forward Network
+  Layer Norm
+    ↓ [Bài 103] Linear + Softmax
+probability distribution over 50,000 tokens
+    ↓
+Chọn token tiếp theo → "đẹp"</div>
+  </div>
+</div>
+
+</div><!-- /container -->
+</body>
+</html>
