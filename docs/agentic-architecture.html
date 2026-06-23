@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bài 163 — Agentic Architecture</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:     #0d1117;
+      --panel:  #161b22;
+      --border: #30363d;
+      --text:   #e6edf3;
+      --muted:  #8b949e;
+      --accent: #58a6ff;
+      --green:  #3fb950;
+      --yellow: #d29922;
+      --red:    #f85149;
+      --purple: #bc8cff;
+      --orange: #ffa657;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      padding: 2rem 1rem;
+    }
+
+    .container { max-width: 960px; margin: 0 auto; }
+
+    h1 { font-size: 2rem; font-weight: 700; color: var(--accent); margin-bottom: 0.25rem; }
+    h2 { font-size: 1.4rem; font-weight: 600; color: var(--text); margin: 2rem 0 1rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
+    h3 { font-size: 1.1rem; font-weight: 600; color: var(--purple); margin: 1.5rem 0 0.5rem; }
+
+    .subtitle { color: var(--muted); margin-bottom: 2rem; font-size: 0.95rem; }
+    .badge {
+      display: inline-block; padding: 0.15rem 0.6rem; border-radius: 20px;
+      font-size: 0.75rem; font-weight: 600; margin-right: 0.4rem;
+    }
+    .badge-blue  { background: #1f3a5f; color: var(--accent); }
+    .badge-green { background: #1a3a2a; color: var(--green); }
+    .badge-orange{ background: #3a2800; color: var(--orange); }
+
+    pre {
+      background: #010409;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      overflow-x: auto;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.25rem 1.5rem;
+      margin-bottom: 1rem;
+    }
+
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    @media(max-width: 640px) { .grid-2 { grid-template-columns: 1fr; } }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+    th { background: #21262d; color: var(--muted); text-align: left; padding: 0.6rem 1rem; font-weight: 600; }
+    td { padding: 0.6rem 1rem; border-top: 1px solid var(--border); vertical-align: top; }
+    tr:hover td { background: #1c2128; }
+
+    .flow {
+      background: #010409;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.5rem;
+      font-family: monospace;
+      font-size: 0.84rem;
+      line-height: 1.8;
+      overflow-x: auto;
+    }
+
+    .kw   { color: var(--purple); }
+    .fn   { color: var(--accent); }
+    .str  { color: var(--green); }
+    .cm   { color: var(--muted); font-style: italic; }
+    .num  { color: var(--orange); }
+
+    .tag-green  { color: var(--green); font-weight: 600; }
+    .tag-red    { color: var(--red); font-weight: 600; }
+    .tag-yellow { color: var(--yellow); font-weight: 600; }
+    .tag-blue   { color: var(--accent); font-weight: 600; }
+
+    .arrow { color: var(--accent); }
+    .note  { color: var(--yellow); font-size: 0.8rem; margin-top: 0.5rem; }
+    .sep   { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+
+    ul { padding-left: 1.5rem; }
+    li { margin-bottom: 0.35rem; }
+
+    .step-num {
+      display: inline-block;
+      background: var(--accent);
+      color: #000;
+      width: 1.4rem; height: 1.4rem;
+      border-radius: 50%;
+      text-align: center; line-height: 1.4rem;
+      font-weight: 700; font-size: 0.8rem;
+      margin-right: 0.4rem;
+      flex-shrink: 0;
+    }
+
+    .step { display: flex; align-items: flex-start; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .step-body { flex: 1; }
+    .step-title { font-weight: 600; color: var(--text); }
+    .step-desc  { color: var(--muted); font-size: 0.88rem; margin-top: 0.2rem; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Agentic Architecture</h1>
+  <p class="subtitle">
+    <span class="badge badge-blue">Bài 163</span>
+    <span class="badge badge-green">book-management</span>
+    <span class="badge badge-orange">Tool-Use Loop</span>
+    Xây dựng AI Agent tự động chọn &amp; gọi tools để trả lời câu hỏi.
+  </p>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>1. Agent là gì? So sánh với LLM thường</h2>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="color:var(--muted)">LLM thường</h3>
+      <pre>User: "Tìm sách Python"
+
+LLM: "Tôi không biết DB của bạn
+      có sách gì, bạn cho tôi
+      biết đi."
+
+<span class="tag-red">❌ Không tự tìm được</span>
+<span class="tag-red">❌ Chỉ dùng kiến thức training</span></pre>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--green)">Agent (tool-use)</h3>
+      <pre>User: "Tìm sách Python"
+
+LLM: [gọi search_books("Python")]
+Tool: [{"id": 2, "title": "Learning Python"}]
+LLM: "Tôi tìm thấy cuốn
+      'Learning Python' (id=2)"
+
+<span class="tag-green">✓ Tự động tìm trong DB thật</span>
+<span class="tag-green">✓ Kết quả chính xác, up-to-date</span></pre>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <h3>Định nghĩa đơn giản</h3>
+    <p>
+      <strong>Agent</strong> = LLM + khả năng gọi functions (tools) + vòng lặp tự chủ.
+      Thay vì trả lời ngay từ training data, agent <em>thu thập thông tin</em> từ tools rồi mới tổng hợp trả lời.
+    </p>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>2. Kiến trúc tổng quan</h2>
+
+  <div class="flow">
+app/agents/
+├── base_agent.py        <span class="cm"># Abstract class + tool_use_loop()</span>
+├── book_agent.py        <span class="cm"># Concrete agent: system prompt + tools list</span>
+├── schemas.py           <span class="cm"># Request/Response Pydantic models</span>
+├── router.py            <span class="cm"># POST /agents/chat  (thin HTTP layer)</span>
+└── tools/
+    ├── registry.py      <span class="cm"># @register_tool decorator + execute_tools_parallel()</span>
+    ├── search_books.py  <span class="cm"># Tìm sách trong DB</span>
+    ├── get_book.py      <span class="cm"># Lấy chi tiết sách</span>
+    └── summarize_book.py  <span class="cm"># AI tóm tắt (tái sử dụng ai/service)</span>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>3. Tool-Use Loop — Trái tim của Agent</h2>
+
+  <div class="card">
+    <h3>Ví dụ cụ thể: "Tìm sách Python và tóm tắt"</h3>
+    <div class="flow">
+<span class="cm">── Iteration 1 ─────────────────────────────────────────────────</span>
+messages = [system, user("Tìm sách Python và tóm tắt")]
+<span class="arrow">→ LLM:</span> finish_reason = <span class="str">"tool_calls"</span>
+         tool_calls = [search_books(query=<span class="str">"Python"</span>)]
+
+<span class="arrow">→ execute_tools_parallel:</span>
+         search_books(<span class="str">"Python"</span>) <span class="arrow">→</span> <span class="str">'{"found":1,"books":[{"id":2,"title":"Learning Python",...}]}'</span>
+
+messages.append(assistant)        <span class="cm"># assistant message với tool_calls</span>
+messages.append(tool_result)      <span class="cm"># {"role":"tool","content":"..."}</span>
+
+<span class="cm">── Iteration 2 ─────────────────────────────────────────────────</span>
+messages = [..., assistant_1, tool_result_1]
+<span class="arrow">→ LLM:</span> finish_reason = <span class="str">"tool_calls"</span>
+         tool_calls = [summarize_book(book_id=<span class="num">2</span>)]
+
+<span class="arrow">→ execute_tools_parallel:</span>
+         summarize_book(<span class="num">2</span>) <span class="arrow">→</span> <span class="str">'{"summary":"Sách dạy Python từ cơ bản..."}'</span>
+
+messages.append(assistant_2)
+messages.append(tool_result_2)
+
+<span class="cm">── Iteration 3 ─────────────────────────────────────────────────</span>
+messages = [..., assistant_1, tool_1, assistant_2, tool_2]
+<span class="arrow">→ LLM:</span> finish_reason = <span class="str">"stop"</span>
+         content = <span class="str">"Tôi tìm thấy 'Learning Python'. Nội dung chính: ..."</span>
+
+<span class="arrow">→ RETURN</span> answer  <span class="cm"># vòng lặp kết thúc</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <h3>Code: _tool_use_loop() trong base_agent.py</h3>
+    <pre><span class="kw">while</span> iteration &lt; self.max_iterations:
+    iteration += <span class="num">1</span>
+
+    <span class="cm"># 1. Gọi LLM với messages + tool schemas</span>
+    response = <span class="kw">await</span> self._call_llm(messages, tool_schemas)
+    choice = response[<span class="str">"choices"</span>][<span class="num">0</span>]
+    finish_reason = choice[<span class="str">"finish_reason"</span>]
+
+    <span class="cm"># 2. LLM trả lời xong → return</span>
+    <span class="kw">if</span> finish_reason == <span class="str">"stop"</span>:
+        <span class="kw">return</span> choice[<span class="str">"message"</span>][<span class="str">"content"</span>]
+
+    <span class="cm"># 3. LLM muốn gọi tool → thực thi rồi loop</span>
+    <span class="kw">if</span> finish_reason == <span class="str">"tool_calls"</span>:
+        tool_calls = choice[<span class="str">"message"</span>][<span class="str">"tool_calls"</span>]
+        messages.append(choice[<span class="str">"message"</span>])      <span class="cm"># giữ assistant message</span>
+        results = <span class="kw">await</span> execute_tools_parallel(tool_calls, self.tools)
+        messages.extend(results)                  <span class="cm"># thêm kết quả tools</span>
+        <span class="kw">continue</span>                              <span class="cm"># LLM đọc lại, quyết định tiếp</span></pre>
+
+    <p class="note">⚠️ Tại sao phải giữ <code>assistant message</code>? OpenAI yêu cầu: message có <code>tool_calls</code> phải có tương ứng <code>tool result</code> với cùng <code>tool_call_id</code>. Không có → API lỗi 400.</p>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>4. Tool Registry — Open/Closed Principle</h2>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="color:var(--muted)">Không có registry</h3>
+      <pre><span class="cm"># Phải sửa agent mỗi khi thêm tool</span>
+<span class="kw">if</span> tool_name == <span class="str">"search_books"</span>:
+    result = search_books(...)
+<span class="kw">elif</span> tool_name == <span class="str">"get_book"</span>:
+    result = get_book(...)
+<span class="kw">elif</span> tool_name == <span class="str">"NEW_TOOL"</span>:  <span class="cm"># ← sửa đây</span>
+    ...</pre>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--green)">Có registry</h3>
+      <pre><span class="cm"># Thêm tool → không cần sửa agent</span>
+<span class="fn">@register_tool</span>(name=<span class="str">"new_tool"</span>, ...)
+<span class="kw">async def</span> new_tool(...) -> str:
+    ...
+
+<span class="cm"># agent.py không thay đổi</span>
+result = TOOL_REGISTRY[tool_name][<span class="str">"fn"</span>](**args)</pre>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <h3>TOOL_REGISTRY structure</h3>
+    <pre>TOOL_REGISTRY = {
+    <span class="str">"search_books"</span>: {
+        <span class="str">"fn"</span>:     &lt;async function search_books&gt;,
+        <span class="str">"schema"</span>: {
+            <span class="str">"type"</span>: <span class="str">"function"</span>,
+            <span class="str">"function"</span>: {
+                <span class="str">"name"</span>:        <span class="str">"search_books"</span>,
+                <span class="str">"description"</span>: <span class="str">"Tìm kiếm sách theo từ khóa..."</span>,
+                <span class="str">"parameters"</span>:  { <span class="cm">/* JSON Schema */</span> }
+            }
+        }
+    },
+    ...
+}</pre>
+    <p class="note">💡 LLM nhận <code>schema</code> (biết tool tên gì, args gì). Agent nhận <code>fn</code> để thực thi khi LLM yêu cầu.</p>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>5. Parallel Tool Execution</h2>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="color:var(--muted)">Sequential (chậm)</h3>
+      <pre>result_1 = await search_books(...)  <span class="cm"># 200ms</span>
+result_2 = await get_book(...)       <span class="cm"># 50ms</span>
+<span class="cm"># Total: 250ms</span></pre>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--green)">Parallel với asyncio.gather (nhanh)</h3>
+      <pre>results = await asyncio.gather(
+    _run_one(tc_1),   <span class="cm"># search_books</span>
+    _run_one(tc_2),   <span class="cm"># get_book</span>
+)
+<span class="cm"># Total: max(200ms, 50ms) = 200ms</span></pre>
+    </div>
+  </div>
+
+  <p style="color:var(--muted);font-size:0.88rem;margin-top:0.75rem">
+    LLM có thể quyết định gọi nhiều tools cùng lúc trong một round.
+    <code>asyncio.gather</code> chạy tất cả song song, chờ hết rồi trả về.
+  </p>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>6. Template Method Pattern — BaseAgent vs BookAgent</h2>
+
+  <div class="card">
+    <pre><span class="cm"># base_agent.py — định nghĩa "khung thuật toán"</span>
+<span class="kw">class</span> <span class="fn">BaseAgent</span>(ABC):
+    <span class="fn">@abstractmethod</span>
+    <span class="kw">def</span> system_prompt(self) -> str: ...    <span class="cm"># subclass override</span>
+
+    <span class="fn">@abstractmethod</span>
+    <span class="kw">def</span> tools(self) -> list[str]: ...        <span class="cm"># subclass override</span>
+
+    <span class="kw">async def</span> chat(self, user_message: str):
+        messages = [system_prompt, user_message]
+        <span class="kw">return await</span> self._tool_use_loop(messages, ...)  <span class="cm"># cố định</span>
+
+<span class="cm"># book_agent.py — chỉ cần điền vào chỗ trống</span>
+<span class="kw">class</span> <span class="fn">BookAgent</span>(BaseAgent):
+    system_prompt = <span class="str">"Bạn là thư viện viên AI..."</span>
+    tools = [<span class="str">"search_books"</span>, <span class="str">"get_book"</span>, <span class="str">"summarize_book"</span>]
+    <span class="cm"># KHÔNG cần viết lại loop — kế thừa từ BaseAgent</span></pre>
+
+    <p class="note">
+      💡 Thêm <code>GeraiAgent</code> mới: chỉ cần tạo class với <code>system_prompt</code> và <code>tools</code> khác.
+      Phần loop không thay đổi.
+    </p>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>7. So sánh với vuonglearning (production system)</h2>
+
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>Feature</th>
+          <th>book-management (học)</th>
+          <th>vuonglearning (production)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Base class</td>
+          <td><code>BaseAgent</code> — abstract + <code>chat()</code></td>
+          <td><code>BaseAgent</code> — abstract + <code>execute()</code> → streaming bytes</td>
+        </tr>
+        <tr>
+          <td>Response</td>
+          <td>JSON text (sync wait for full answer)</td>
+          <td>SSE stream (token-by-token, real-time)</td>
+        </tr>
+        <tr>
+          <td>Tool registry</td>
+          <td>Manual <code>@register_tool</code> + <code>__init__.py</code> imports</td>
+          <td><code>discover_tools()</code> auto-imports from <code>src/tools/</code></td>
+        </tr>
+        <tr>
+          <td>Parallel execution</td>
+          <td><code>asyncio.gather</code></td>
+          <td><code>asyncio.gather</code> + dedup check</td>
+        </tr>
+        <tr>
+          <td>Tool definitions</td>
+          <td>3 tools (search, get, summarize)</td>
+          <td>20+ tools (web search, image gen, memory, calculator...)</td>
+        </tr>
+        <tr>
+          <td>Tracing</td>
+          <td>Structured logging (logger.info)</td>
+          <td>Langfuse spans + metrics (Prometheus)</td>
+        </tr>
+        <tr>
+          <td>Max iterations</td>
+          <td>8 (hard-coded)</td>
+          <td>Configurable per agent, typically 5</td>
+        </tr>
+        <tr>
+          <td>LangGraph?</td>
+          <td class="tag-red">Không — custom loop</td>
+          <td class="tag-red">Không — custom loop for SSE control</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>8. Tại sao KHÔNG dùng LangGraph?</h2>
+
+  <div class="grid-2">
+    <div class="card">
+      <h3 style="color:var(--muted)">LangGraph phù hợp khi</h3>
+      <ul>
+        <li>Workflow phức tạp với nhiều nhánh conditional</li>
+        <li>Nhiều agents tương tác nhau (multi-agent)</li>
+        <li>Cần visualize graph</li>
+        <li>Không cần full control output stream</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--green)">Custom loop phù hợp khi</h3>
+      <ul>
+        <li>Cần control từng byte của output (SSE streaming)</li>
+        <li>Tool-use đơn giản, không cần graph phức tạp</li>
+        <li>Muốn minimize dependencies</li>
+        <li>Cần tích hợp chặt với infra hiện có (Redis, metrics)</li>
+      </ul>
+    </div>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>9. Cách dùng API</h2>
+
+  <div class="card">
+    <h3>Request</h3>
+    <pre>POST /agents/chat
+Content-Type: application/json
+
+{
+  <span class="str">"message"</span>: <span class="str">"Tìm sách Python và tóm tắt cuốn đầu tiên"</span>
+}</pre>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <h3>Response</h3>
+    <pre>{
+  <span class="str">"answer"</span>: <span class="str">"Tôi tìm thấy cuốn 'Learning Python 3' của Mark Summerfield. Nội dung chính: Sách hướng dẫn lập trình Python từ cơ bản..."</span>,
+  <span class="str">"tool_calls"</span>: [
+    { <span class="str">"tool"</span>: <span class="str">"search_books"</span>, <span class="str">"args"</span>: <span class="str">"{\"query\": \"Python\"}"</span> },
+    { <span class="str">"tool"</span>: <span class="str">"summarize_book"</span>, <span class="str">"args"</span>: <span class="str">"{\"book_id\": 2}"</span> }
+  ],
+  <span class="str">"iterations"</span>: <span class="num">2</span>
+}</pre>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <h3>Test với curl</h3>
+    <pre>curl -X POST http://localhost:8000/agents/chat \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -d <span class="str">'{"message": "Tìm sách về machine learning"}'</span></pre>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══════════════════════════════════════════════════════════════════════ -->
+  <h2>10. Thêm tool mới — 3 bước</h2>
+
+  <div class="card">
+    <div class="step">
+      <span class="step-num">1</span>
+      <div class="step-body">
+        <div class="step-title">Tạo file tool mới</div>
+        <div class="step-desc"><code>app/agents/tools/rag_ask.py</code></div>
+      </div>
+    </div>
+    <pre style="margin:0.5rem 0"><span class="fn">@register_tool</span>(
+    name=<span class="str">"ask_book_rag"</span>,
+    description=<span class="str">"Hỏi câu hỏi về nội dung PDF của sách đã được indexed"</span>,
+    parameters={...},
+)
+<span class="kw">async def</span> ask_book_rag(book_id: int, question: str) -> str:
+    <span class="cm"># gọi RAG service đã có sẵn</span>
+    ...</pre>
+
+    <div class="step" style="margin-top:1rem">
+      <span class="step-num">2</span>
+      <div class="step-body">
+        <div class="step-title">Thêm import vào <code>tools/__init__.py</code></div>
+        <pre>from app.agents.tools.rag_ask import ask_book_rag</pre>
+      </div>
+    </div>
+
+    <div class="step" style="margin-top:1rem">
+      <span class="step-num">3</span>
+      <div class="step-body">
+        <div class="step-title">Thêm vào <code>BookAgent.tools</code></div>
+        <pre>tools = [<span class="str">"search_books"</span>, <span class="str">"get_book"</span>, <span class="str">"summarize_book"</span>, <span class="str">"ask_book_rag"</span>]</pre>
+      </div>
+    </div>
+
+    <p class="note">✅ Không cần sửa <code>base_agent.py</code>, <code>registry.py</code>, hay bất kỳ file nào khác.</p>
+  </div>
+
+  <div style="text-align:center; color:var(--muted); font-size:0.8rem; margin-top:3rem; padding-top:1rem; border-top:1px solid var(--border)">
+    book-management learning project · bài 163 agentic architecture
+  </div>
+
+</div>
+</body>
+</html>

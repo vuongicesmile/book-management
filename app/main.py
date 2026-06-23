@@ -23,3 +23,6 @@ app.include_router(ai_router, prefix="/ai", tags=["AI"])
 
 from app.ai.rag.router import router as rag_router
 app.include_router(rag_router, prefix="/ai/rag", tags=["RAG"])
+
+from app.agents.router import router as agent_router
+app.include_router(agent_router, prefix="/agents", tags=["Agents"])
