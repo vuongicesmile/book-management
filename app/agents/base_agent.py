@@ -57,6 +57,7 @@ Phần "how to loop" nằm trong BaseAgent — không lặp code ở subclass.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -105,16 +106,22 @@ class BaseAgent(ABC):
         """Số vòng tool tối đa. Override để tăng cho agent phức tạp hơn."""
         return _MAX_ITERATIONS
 
-    async def chat(self, user_message: str) -> dict:
+    async def chat(self, user_message: str, user_id: str | None = None) -> dict:
         """Entry point: nhận câu hỏi, trả về câu trả lời + lịch sử tool calls.
 
-        Flow:
-          1. Khởi tạo messages [system, user]
-          2. Chạy tool_use_loop
-          3. Return final answer + tool history
+        ## Memory injection (bài 177-188)
+
+        Nếu user_id được cung cấp:
+          1. Fetch memory context từ DB
+          2. Append vào system prompt: "Bạn biết về user: {context}"
+          3. Sau chat: background task cập nhật memory
+
+        Giống vuonglearning retrieve_memory_summary() + inject vào system prompt
+        trong ai_proxy/service.py trước khi gọi ai-service.
 
         Args:
             user_message: Câu hỏi hoặc yêu cầu từ người dùng
+            user_id:      IP hoặc session ID để fetch/update memory
 
         Returns:
             dict với:
@@ -129,10 +136,32 @@ class BaseAgent(ABC):
                 "iterations": 0,
             }
 
+        # ── Build system prompt với memory injection ──────────────────────
+        # Bước 1: Lấy base system prompt từ subclass
+        system_content = self.system_prompt
+
+        # Bước 2: Inject user_id để tool save_preference biết dùng
+        # LLM cần biết user_id cụ thể để điền vào tham số của save_preference tool
+        if user_id:
+            system_content += f"\n\nUser ID hiện tại: {user_id}"
+
+        # Bước 3: Inject memory context nếu có
+        # Giống vuonglearning: "User memory: {summary}" thêm vào cuối system prompt
+        if user_id:
+            from app.agents.memory import retrieve_memory_context
+            memory_context = retrieve_memory_context(user_id)
+            if memory_context:
+                system_content += (
+                    f"\n\nThông tin về người dùng này (từ lịch sử trước):\n{memory_context}"
+                )
+                logger.info(
+                    "agent.chat.memory_injected",
+                    extra={"user_id": user_id, "memory_len": len(memory_context)},
+                )
+
         # Khởi tạo conversation messages
-        # Format: list of dicts theo OpenAI chat completions spec
         messages: list[dict] = [
-            {"role": "system", "content": self.system_prompt},
+            {"role": "system", "content": system_content},
             {"role": "user", "content": user_message},
         ]
 
@@ -144,6 +173,7 @@ class BaseAgent(ABC):
             extra={
                 "agent": self.__class__.__name__,
                 "tools": self.tools,
+                "user_id": user_id or "anonymous",
                 "message": user_message[:100],
             },
         )
@@ -152,6 +182,16 @@ class BaseAgent(ABC):
         answer, tool_history, iterations = await self._tool_use_loop(
             messages, tool_schemas
         )
+
+        # ── Background memory update ──────────────────────────────────────
+        # Sau khi chat xong → background task cập nhật memory profile
+        # asyncio.create_task = fire-and-forget, không block response
+        # Giống vuonglearning _rewrite_memory_background()
+        if user_id and answer:
+            from app.agents.memory import update_memory_background
+            asyncio.create_task(
+                update_memory_background(user_id, user_message, answer)
+            )
 
         logger.info(
             "agent.chat.done",

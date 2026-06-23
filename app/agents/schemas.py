@@ -10,22 +10,33 @@ class AgentChatRequest(BaseModel):
         ...,
         min_length=1,
         max_length=1000,
-        description="Câu hỏi hoặc yêu cầu cho agent",
-        examples=["Tìm sách về Python và tóm tắt cuốn đầu tiên"],
+        description="Cau hoi hoac yeu cau cho agent",
+        examples=["Tim sach ve Python va tom tat cuon dau tien"],
+    )
+    # user_id optional — neu khong co, dung IP tu request
+    # Giong vuonglearning: user_id tu JWT auth, o day dung IP cho don gian
+    user_id: str | None = Field(
+        default=None,
+        max_length=64,
+        description="User identifier. Neu khong co, dung IP address lam ID.",
     )
 
 
 class ToolCallRecord(BaseModel):
-    """Ghi lại một tool call đã được thực thi."""
-    tool: str = Field(description="Tên tool đã gọi")
-    args: str = Field(description="Arguments dưới dạng JSON string")
+    """Ghi lai mot tool call da duoc thuc thi."""
+    tool: str = Field(description="Ten tool da goi")
+    args: str = Field(description="Arguments duoi dang JSON string")
 
 
 class AgentChatResponse(BaseModel):
-    """Response từ agent chat endpoint."""
-    answer: str = Field(description="Câu trả lời cuối cùng từ agent")
+    """Response tu agent chat endpoint."""
+    answer: str = Field(description="Cau tra loi cuoi cung tu agent")
     tool_calls: list[ToolCallRecord] = Field(
         default_factory=list,
-        description="Danh sách tool calls đã thực hiện trong quá trình xử lý",
+        description="Danh sach tool calls da thuc hien trong qua trinh xu ly",
     )
-    iterations: int = Field(description="Số vòng LLM loop đã chạy")
+    iterations: int = Field(description="So vong LLM loop da chay")
+    memory_used: bool = Field(
+        default=False,
+        description="True neu agent co su dung memory context",
+    )

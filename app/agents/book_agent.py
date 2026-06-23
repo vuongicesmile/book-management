@@ -51,17 +51,18 @@ from functools import lru_cache
 
 from app.agents.base_agent import BaseAgent
 
-# Import để trigger @register_tool decorators
-from app.agents.tools import get_book, search_books, summarize_book  # noqa: F401
+# Import để trigger @register_tool decorators (bao gồm save_preference mới)
+from app.agents.tools import get_book, save_preference, search_books, summarize_book  # noqa: F401
 
 
 class BookAgent(BaseAgent):
     """Agent chuyên trả lời câu hỏi về sách trong thư viện.
 
-    Biết 3 tools:
+    Biết 4 tools (bài 163 + 177-188):
       search_books    - tìm kiếm theo từ khóa
       get_book        - lấy chi tiết theo ID
       summarize_book  - tóm tắt nội dung bằng AI
+      save_preference - lưu sở thích vào long-term memory (MỚI)
     """
 
     @property
@@ -72,19 +73,20 @@ class BookAgent(BaseAgent):
             "Bạn có các công cụ sau:\n"
             "1. search_books: Tìm sách theo từ khóa trong tiêu đề/mô tả\n"
             "2. get_book: Lấy thông tin chi tiết của sách theo ID\n"
-            "3. summarize_book: Tóm tắt nội dung sách bằng AI\n\n"
+            "3. summarize_book: Tóm tắt nội dung sách bằng AI\n"
+            "4. save_preference: Lưu sở thích đọc sách vào bộ nhớ dài hạn\n\n"
             "Hướng dẫn:\n"
             "- Luôn dùng tool để tra cứu thông tin thực, không đoán mò\n"
             "- Nếu cần search trước rồi mới summarize, hãy làm theo thứ tự đó\n"
+            "- Khi user nói 'nhớ rằng...', 'lưu lại...', hãy gọi save_preference\n"
+            "- Nếu có thông tin về sở thích user (từ memory), hãy ưu tiên gợi ý phù hợp\n"
             "- Trả lời bằng tiếng Việt, thân thiện và súc tích\n"
             "- Nếu không tìm thấy sách phù hợp, hãy nói thật"
         )
 
     @property
     def tools(self) -> list[str]:
-        # Chỉ expose 3 tools — principle of least privilege
-        # Nếu sau này thêm admin tool (delete_book), BookAgent không tự nhiên có quyền đó
-        return ["search_books", "get_book", "summarize_book"]
+        return ["search_books", "get_book", "summarize_book", "save_preference"]
 
 
 @lru_cache(maxsize=1)

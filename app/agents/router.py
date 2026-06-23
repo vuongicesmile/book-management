@@ -1,18 +1,19 @@
 """Agent router — FastAPI endpoint cho BookAgent.
 
 POST /agents/chat
-  Input:  { "message": "Tìm sách Python" }
-  Output: { "answer": "...", "tool_calls": [...], "iterations": 2 }
+  Input:  { "message": "Tim sach Python", "user_id": "optional" }
+  Output: { "answer": "...", "tool_calls": [...], "iterations": 2, "memory_used": true }
 
-## Pattern: thin router
+## Memory Layer (bai 177-188)
 
-Router chỉ làm:
-  1. Parse request
-  2. Gọi agent.chat()
-  3. Return response
+user_id duoc xac dinh theo thu tu uu tien:
+  1. body.user_id — truyen tu client (e.g. session ID)
+  2. request.client.host — IP address (fallback)
 
-Không có business logic trong router.
-Giống vuonglearning ai_proxy/router.py → service.proxy_chat_completion()
+Memory inject: base_agent.chat(user_message, user_id) se:
+  - Fetch memory context tu DB
+  - Append vao system prompt
+  - Background update sau khi chat xong
 """
 from __future__ import annotations
 
@@ -21,6 +22,7 @@ import logging
 from fastapi import APIRouter, Request
 
 from app.agents.book_agent import get_book_agent
+from app.agents.memory import retrieve_memory_context
 from app.agents.schemas import AgentChatRequest, AgentChatResponse, ToolCallRecord
 from app.common.rate_limit import check_ai_rate_limit
 
@@ -30,35 +32,63 @@ logger = logging.getLogger(__name__)
 
 @router.post("/chat", response_model=AgentChatResponse)
 async def agent_chat(body: AgentChatRequest, request: Request) -> AgentChatResponse:
-    """Gửi câu hỏi cho BookAgent và nhận câu trả lời.
+    """Gui cau hoi cho BookAgent va nhan cau tra loi.
 
-    Agent sẽ tự động:
-    1. Quyết định tools cần dùng
-    2. Thực thi tools (tìm DB, gọi AI)
-    3. Tổng hợp kết quả thành câu trả lời
+    Agent tu dong:
+    1. Doc memory cua user (neu co) va inject vao context
+    2. Quyet dinh tools can dung
+    3. Thuc thi tools (tim DB, goi AI)
+    4. Tong hop ket qua thanh cau tra loi
+    5. Background: cap nhat memory sau chat
 
-    Ví dụ:
+    Vi du:
       POST /agents/chat
-      {"message": "Tìm sách về machine learning và tóm tắt cuốn đầu tiên"}
+      {"message": "Nho rang toi thich sach Python"}
+      → Agent goi save_preference, luu vao DB
 
-    Response:
-      {
-        "answer": "Tôi tìm thấy cuốn 'Hands-On ML'. Nội dung: ...",
-        "tool_calls": [
-          {"tool": "search_books", "args": "{\"query\": \"machine learning\"}"},
-          {"tool": "summarize_book", "args": "{\"book_id\": 3}"}
-        ],
-        "iterations": 2
-      }
+      POST /agents/chat  (lan sau)
+      {"message": "Goi y sach cho toi"}
+      → Agent biet "thich Python" → goi search_books("Python")
     """
-    # Rate limit — bảo vệ OpenAI cost (mỗi agent chat có thể gọi LLM nhiều lần)
     await check_ai_rate_limit(request)
 
+    # Xac dinh user_id: body > IP fallback
+    user_id: str | None = body.user_id
+    if not user_id and request.client:
+        user_id = request.client.host  # IP address lam fallback identifier
+
+    # Kiem tra truoc khi chat: co memory khong?
+    memory_context = retrieve_memory_context(user_id) if user_id else None
+
     agent = get_book_agent()
-    result = await agent.chat(body.message)
+    result = await agent.chat(body.message, user_id=user_id)
 
     return AgentChatResponse(
         answer=result["answer"],
         tool_calls=[ToolCallRecord(**tc) for tc in result["tool_calls"]],
         iterations=result["iterations"],
+        memory_used=memory_context is not None,
     )
+
+
+@router.get("/memory", summary="Xem memory hien tai cua user")
+async def get_memory(request: Request, user_id: str | None = None):
+    """Debug endpoint: xem memory context se duoc inject cho user nay.
+
+    Query params:
+      user_id: optional — neu khong co, dung IP
+
+    Vi du:
+      GET /agents/memory
+      GET /agents/memory?user_id=192.168.1.1
+    """
+    uid = user_id or (request.client.host if request.client else None)
+    if not uid:
+        return {"user_id": None, "memory": None}
+
+    context = retrieve_memory_context(uid)
+    return {
+        "user_id": uid,
+        "memory": context,
+        "has_memory": context is not None,
+    }
