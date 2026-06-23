@@ -12,44 +12,53 @@ So sánh với vuonglearning router.py:
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.orm import Session
 
 from app.ai import schemas, service
 from app.api.deps import get_db
+from app.common.rate_limit import check_ai_rate_limit
 
 router = APIRouter()
 
 
 # ── LLM endpoints ─────────────────────────────────────────────────────────────
+# Pattern 2: Rate Limiting — học từ vuonglearning rate_limit.py
+# vuonglearning: per-IP limit cho /auth/signin, /auth/signup
+# book-management: per-IP limit cho AI endpoints (bảo vệ OpenAI cost)
 
 @router.post("/books/{book_id}/summarize", response_model=schemas.SummarizeResponse)
-async def summarize(book_id: int, db: Session = Depends(get_db)):
-    """Dùng LLM tóm tắt sách thành 2-3 câu tiếng Việt."""
+async def summarize(book_id: int, request: Request, db: Session = Depends(get_db)):
+    """Dùng LLM tóm tắt sách. Rate limited: 20 req/60s per IP."""
+    await check_ai_rate_limit(request)  # 429 nếu vượt limit
     return await service.summarize(book_id, db)
 
 
 @router.post("/books/{book_id}/generate-description", response_model=schemas.GenerateDescriptionResponse)
 async def gen_description(
     book_id: int,
+    request: Request,
     save: bool = Query(default=False, description="True → lưu description vào DB"),
     db: Session = Depends(get_db),
 ):
-    """Dùng LLM viết description cho sách. ?save=true để lưu vào DB."""
+    """Dùng LLM viết description cho sách. Rate limited."""
+    await check_ai_rate_limit(request)
     return await service.generate_description(book_id, save, db)
 
 
 # ── Embedding endpoints ────────────────────────────────────────────────────────
 
 @router.post("/books/{book_id}/embed", response_model=schemas.EmbedBookResponse)
-async def embed_book(book_id: int, db: Session = Depends(get_db)):
-    """Tạo và lưu vector embedding 1536 chiều cho sách."""
+async def embed_book(book_id: int, request: Request, db: Session = Depends(get_db)):
+    """Tạo và lưu vector embedding 1536 chiều cho sách. Rate limited."""
+    await check_ai_rate_limit(request)
     return await service.embed_book(book_id, db)
 
 
 @router.post("/books/embed-all", response_model=schemas.EmbedAllResponse)
-async def embed_all(db: Session = Depends(get_db)):
-    """Batch embed tất cả books chưa có embedding."""
+async def embed_all(request: Request, db: Session = Depends(get_db)):
+    """Batch embed tất cả books chưa có embedding. Rate limited."""
+    await check_ai_rate_limit(request)
     return await service.embed_all_books(db)
 
 

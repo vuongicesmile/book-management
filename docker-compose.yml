@@ -1,0 +1,46 @@
+services:
+  # ── API server ─────────────────────────────────────────────────────────────
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+      - ./.chroma:/app/.chroma
+    env_file: .env
+    depends_on:
+      - redis
+
+  # ── RQ Worker (bài 158+162) ────────────────────────────────────────────────
+  # Scale: docker compose up --scale worker=3  → 3 jobs song song
+  worker:
+    build: .
+    command: python worker.py
+    volumes:
+      - .:/app
+      - ./uploads:/app/uploads
+      - ./.chroma:/app/.chroma
+    env_file: .env
+    depends_on:
+      - redis
+
+  # ── Redis / Valkey ─────────────────────────────────────────────────────────
+  # Valkey = open-source Redis fork (Redis đổi license SSPL năm 2024)
+  # Tương thích 100% Redis API — redis-py, rq đều dùng được
+  # Học từ vuonglearning docker-compose.yml: redis:7.4-alpine, 512MB, allkeys-lru
+  redis:
+    image: valkey/valkey:8-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: >
+      valkey-server
+      --save 60 1
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+
+volumes:
+  redis_data:

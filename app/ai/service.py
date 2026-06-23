@@ -17,6 +17,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.ai import tasks
+from app.common.redis import cache_delete, cache_get, cache_key, cache_set
 from app.ai.prompts import (
     build_embedding_text,
     build_generate_description_prompt,
@@ -61,6 +62,15 @@ def _cosine_similarity(a: list[float], b: list[float]) -> float:
 # ── LLM services ───────────────────────────────────────────────────────────────
 
 async def summarize(book_id: int, db: Session) -> SummarizeResponse:
+    # Pattern 1: AI Result Cache — học từ vuonglearning ai-service/cache.py
+    # vuonglearning: cache web search results, image summaries để tránh gọi lại OpenAI
+    # book-management: cache summary 1h — cùng book, cùng nội dung → không cần gọi lại
+    key = cache_key("ai", "summary", book_id)
+    cached = await cache_get(key)
+    if cached:
+        logger.info("ai.service.summarize.cache_hit", extra={"book_id": book_id})
+        return SummarizeResponse(**cached)
+
     repo = BookRepository(db)
     book = repo.get_by_id(book_id)
     prompt = build_summarize_prompt(title=book.title, author=book.author.name, description=book.description)
@@ -70,17 +80,26 @@ async def summarize(book_id: int, db: Session) -> SummarizeResponse:
     except Exception as e:
         _handle_ai_error(e)
 
+    result = SummarizeResponse(book_id=book.id, title=book.title, summary=summary)
+    await cache_set(key, result.model_dump(), ttl=settings.cache_ai_result_ttl)
     logger.info("ai.service.summarize.done", extra={"book_id": book_id})
-    return SummarizeResponse(book_id=book.id, title=book.title, summary=summary)
+    return result
 
 
 async def generate_description(book_id: int, save: bool, db: Session) -> GenerateDescriptionResponse:
+    # Cache chỉ khi không save — nếu save=True thì generate mới để user nhận kết quả mới nhất
+    key = cache_key("ai", "description", book_id)
+    if not save:
+        cached = await cache_get(key)
+        if cached:
+            logger.info("ai.service.description.cache_hit", extra={"book_id": book_id})
+            return GenerateDescriptionResponse(**cached)
+
     repo = BookRepository(db)
     book = repo.get_by_id(book_id)
     prompt = build_generate_description_prompt(title=book.title, author=book.author.name, category=book.category.name)
 
     try:
-        # temperature_creative từ config — cao hơn mặc định để viết hấp dẫn hơn
         description = await tasks._call_chat(
             prompt,
             max_tokens=settings.openai_max_tokens_describe,
@@ -91,11 +110,15 @@ async def generate_description(book_id: int, save: bool, db: Session) -> Generat
 
     if save:
         repo.update_description(book_id, description)
+        await cache_delete(key)   # invalidate — description đã thay đổi trong DB
         logger.info("ai.service.description.saved", extra={"book_id": book_id})
 
-    return GenerateDescriptionResponse(
+    result = GenerateDescriptionResponse(
         book_id=book.id, title=book.title, generated_description=description, saved=save
     )
+    if not save:
+        await cache_set(key, result.model_dump(), ttl=settings.cache_ai_result_ttl)
+    return result
 
 
 # ── Embedding services ─────────────────────────────────────────────────────────

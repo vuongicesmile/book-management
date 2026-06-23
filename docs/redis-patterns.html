@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Redis Patterns — Book Management</title>
+<style>
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #222535;
+    --border: #2e3348; --accent: #6c8ef5; --green: #4ade80;
+    --yellow: #fbbf24; --red: #f87171; --cyan: #22d3ee;
+    --purple: #a78bfa; --text: #e2e8f0; --muted: #7c8ba3;
+    --code-bg: #0d1117;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); line-height: 1.65; font-size: 15px; }
+  .hero { background: linear-gradient(135deg, #1a1d27, #161a2e); border-bottom: 1px solid var(--border); padding: 2rem; text-align: center; }
+  .hero h1 { font-size: 1.7rem; font-weight: 700; margin-bottom: .3rem; }
+  .hero p { color: var(--muted); font-size: .95rem; }
+  .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden; }
+  .section-header { padding: 1rem 1.4rem; border-bottom: 1px solid var(--border); background: var(--surface2); display: flex; align-items: center; gap: .8rem; }
+  .num { background: var(--accent); color: #fff; font-size: .72rem; font-weight: 800; padding: .2rem .55rem; border-radius: 6px; }
+  .num.green { background: #16a34a; }
+  .num.purple { background: #7c3aed; }
+  .section-header h2 { font-size: 1rem; font-weight: 700; }
+  .body { padding: 1.2rem 1.4rem; }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; overflow-x: auto; font-size: .82rem; line-height: 1.6; margin: .8rem 0; }
+  code { font-family: 'Fira Code', 'Consolas', monospace; }
+  .ic { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: .1rem .35rem; font-family: monospace; font-size: .83em; color: var(--cyan); }
+  .kw { color: #c792ea; } .fn { color: #82aaff; } .st { color: #c3e88d; } .cm { color: #546e7a; font-style: italic; } .nm { color: #f78c6c; }
+  h3 { font-size: .95rem; font-weight: 700; color: var(--accent); margin: 1rem 0 .5rem; }
+  h3:first-child { margin-top: 0; }
+  p { margin-bottom: .6rem; color: var(--text); }
+  ul { padding-left: 1.3rem; margin: .4rem 0 .7rem; }
+  li { margin-bottom: .3rem; }
+  table { width: 100%; border-collapse: collapse; margin: .8rem 0; font-size: .86rem; }
+  th { background: var(--surface2); padding: .5rem .9rem; text-align: left; border: 1px solid var(--border); font-weight: 700; color: var(--accent); }
+  td { padding: .45rem .9rem; border: 1px solid var(--border); vertical-align: top; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.02); }
+  .flow { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; font-family: monospace; font-size: .82rem; margin: .8rem 0; overflow-x: auto; }
+  .callout { border-radius: 8px; padding: .8rem 1rem; margin: .8rem 0; display: flex; gap: .7rem; font-size: .88rem; }
+  .callout.info { background: rgba(108,142,245,.1); border-left: 3px solid var(--accent); }
+  .callout.tip { background: rgba(74,222,128,.08); border-left: 3px solid var(--green); }
+  .callout.warn { background: rgba(251,191,36,.08); border-left: 3px solid var(--yellow); }
+  .callout-icon { font-size: 1rem; line-height: 1.5; flex-shrink: 0; }
+  .tag { display: inline-block; padding: .15rem .45rem; border-radius: 4px; font-size: .75rem; font-weight: 700; margin-right: .3rem; }
+  .tag.hit { background: rgba(74,222,128,.15); color: var(--green); border: 1px solid rgba(74,222,128,.3); }
+  .tag.miss { background: rgba(248,113,113,.15); color: var(--red); border: 1px solid rgba(248,113,113,.3); }
+  .tag.skip { background: rgba(251,191,36,.12); color: var(--yellow); border: 1px solid rgba(251,191,36,.2); }
+  .file-ref { color: var(--cyan); font-family: monospace; font-size: .85rem; }
+</style>
+</head>
+<body>
+
+<div class="hero">
+  <h1>Redis Patterns — Book Management</h1>
+  <p>3 patterns học từ vuonglearning · áp dụng thực tế vào project</p>
+</div>
+
+<div class="container">
+
+  <!-- TỔNG QUAN -->
+  <div class="section">
+    <div class="section-header">
+      <span class="num">★</span>
+      <h2>Tổng quan — 3 Patterns + Files</h2>
+    </div>
+    <div class="body">
+      <table>
+        <tr><th>Pattern</th><th>Học từ vuonglearning</th><th>Áp dụng ở đâu</th><th>Files</th></tr>
+        <tr>
+          <td><strong>1. Cache</strong></td>
+          <td><span class="file-ref">dependencies.py</span> user cache 60s<br><span class="file-ref">ai-service/cache.py</span> search cache</td>
+          <td>GET /books/{id}<br>POST /ai/.../summarize<br>POST /ai/.../generate-description</td>
+          <td><span class="file-ref">app/common/redis.py</span></td>
+        </tr>
+        <tr>
+          <td><strong>2. Rate Limit</strong></td>
+          <td><span class="file-ref">rate_limit.py</span> per-IP Lua script</td>
+          <td>Tất cả AI endpoints<br>(bảo vệ OpenAI cost)</td>
+          <td><span class="file-ref">app/common/rate_limit.py</span></td>
+        </tr>
+        <tr>
+          <td><strong>3. Async Queue</strong></td>
+          <td>FastAPI background_tasks<br>(vuonglearning dùng cho title gen)</td>
+          <td>POST /ai/rag/.../index/async<br>GET /ai/rag/jobs/{id}</td>
+          <td><span class="file-ref">app/queue.py</span><br><span class="file-ref">app/ai/rag/tasks.py</span><br><span class="file-ref">worker.py</span></td>
+        </tr>
+      </table>
+
+      <h3>Cách chạy</h3>
+      <pre><code><span class="cm"># 1. Khởi động Redis</span>
+docker compose up redis -d
+
+<span class="cm"># 2. API server</span>
+uvicorn app.main:app --reload
+
+<span class="cm"># 3. Worker (terminal riêng) — bài 158</span>
+python worker.py
+
+<span class="cm"># Scale 3 workers song song — bài 162</span>
+docker compose up --scale worker=<span class="nm">3</span></code></pre>
+    </div>
+  </div>
+
+  <!-- PATTERN 1: CACHE -->
+  <div class="section">
+    <div class="section-header">
+      <span class="num">1</span>
+      <h2>Cache — tránh query DB và gọi OpenAI lặp lại</h2>
+    </div>
+    <div class="body">
+
+      <h3>Vấn đề không có cache</h3>
+      <div class="flow">GET /books/42  →  DB query (5ms)  →  response
+GET /books/42  →  DB query (5ms)  →  response   ← query giống hệt, tốn DB thêm
+GET /books/42  →  DB query (5ms)  →  response   ← 100 users cùng lúc = 100 queries
+
+POST /ai/books/42/summarize  →  OpenAI (3s, $0.001)
+POST /ai/books/42/summarize  →  OpenAI (3s, $0.001)  ← cùng book, cùng nội dung = lãng phí</div>
+
+      <h3>Flow với cache</h3>
+      <div class="flow">GET /books/42
+  ↓ cache_get("bm:book:42")
+  <span style="color:#4ade80">HIT</span>  → return immediately (0ms)
+  <span style="color:#f87171">MISS</span> → DB query → cache_set("bm:book:42", data, ttl=300) → return
+
+POST /ai/books/42/summarize
+  ↓ cache_get("bm:ai:summary:42")
+  <span style="color:#4ade80">HIT</span>  → return cached summary (0ms, $0)
+  <span style="color:#f87171">MISS</span> → OpenAI call → cache_set(..., ttl=3600) → return</div>
+
+      <h3>app/common/redis.py — building blocks</h3>
+      <pre><code><span class="cm"># cache_key: namespaced keys — học từ vuonglearning "ilmu:user:42"</span>
+cache_key(<span class="st">"book"</span>, <span class="nm">42</span>)       <span class="cm"># → "bm:book:42"</span>
+cache_key(<span class="st">"ai"</span>, <span class="st">"summary"</span>, <span class="nm">42</span>) <span class="cm"># → "bm:ai:summary:42"</span>
+
+<span class="cm"># cache_get: JSON deserialize, None nếu miss hoặc Redis down (fail-open)</span>
+cached = <span class="kw">await</span> cache_get(key)
+
+<span class="cm"># cache_set: JSON serialize + TTL</span>
+<span class="kw">await</span> cache_set(key, data, ttl=<span class="nm">300</span>)
+
+<span class="cm"># cache_delete: invalidate khi data thay đổi</span>
+<span class="kw">await</span> cache_delete(key)  <span class="cm"># gọi sau PUT/DELETE</span></code></pre>
+
+      <h3>Áp dụng — GET /books/{id}</h3>
+      <pre><code><span class="cm"># app/api/endpoints/books.py</span>
+<span class="dc">@router.get</span>(<span class="st">"/{book_id}"</span>)
+<span class="kw">async def</span> <span class="fn">get_book</span>(book_id: <span class="nm">int</span>, db = Depends(get_db)):
+    key = cache_key(<span class="st">"book"</span>, book_id)
+    cached = <span class="kw">await</span> cache_get(key)
+    <span class="kw">if</span> cached:
+        <span class="kw">return</span> cached               <span class="cm"># HIT: 0ms, no DB</span>
+
+    book = BookRepository(db).get_by_id(book_id)   <span class="cm"># MISS: query DB</span>
+    <span class="kw">await</span> cache_set(key, {...}, ttl=settings.cache_book_ttl)
+    <span class="kw">return</span> book
+
+<span class="dc">@router.put</span>(<span class="st">"/{book_id}"</span>)
+<span class="kw">async def</span> <span class="fn">update_book</span>(book_id: <span class="nm">int</span>, ...):
+    book = BookRepository(db).update(book_id, ...)
+    <span class="kw">await</span> cache_delete(cache_key(<span class="st">"book"</span>, book_id))  <span class="cm"># INVALIDATE</span>
+    <span class="kw">return</span> book</code></pre>
+
+      <h3>Áp dụng — AI result cache</h3>
+      <pre><code><span class="cm"># app/ai/service.py — summarize</span>
+<span class="kw">async def</span> <span class="fn">summarize</span>(book_id, db):
+    key = cache_key(<span class="st">"ai"</span>, <span class="st">"summary"</span>, book_id)
+    cached = <span class="kw">await</span> cache_get(key)
+    <span class="kw">if</span> cached:
+        <span class="kw">return</span> SummarizeResponse(**cached)   <span class="cm"># HIT: $0, 0ms</span>
+
+    <span class="cm"># MISS: gọi OpenAI</span>
+    summary = <span class="kw">await</span> tasks._call_chat(prompt, ...)
+    result = SummarizeResponse(...)
+    <span class="kw">await</span> cache_set(key, result.model_dump(), ttl=<span class="nm">3600</span>)  <span class="cm"># 1h</span>
+    <span class="kw">return</span> result</code></pre>
+
+      <div class="callout info">
+        <span class="callout-icon">💡</span>
+        <div>
+          <strong>TTL strategy:</strong> Book data (5 phút) — ít thay đổi nhưng có thể update.<br>
+          AI results (1 giờ) — cùng book cùng nội dung, tốn tiền gọi lại.<br>
+          Khi user <span class="ic">PUT /books/{id}</span> → invalidate cả book cache + AI cache.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PATTERN 2: RATE LIMIT -->
+  <div class="section">
+    <div class="section-header">
+      <span class="num green">2</span>
+      <h2>Rate Limiting — bảo vệ OpenAI cost</h2>
+    </div>
+    <div class="body">
+
+      <h3>Tại sao cần rate limit AI endpoints?</h3>
+      <ul>
+        <li>Mỗi call OpenAI tốn tiền — không limit → abuse → bill tăng đột biến</li>
+        <li>vuonglearning limit: signin=10/window, default=220/window</li>
+        <li>Book-management: AI endpoints = 20 calls/60s per IP</li>
+      </ul>
+
+      <h3>Lua script — atomic, không race condition</h3>
+      <pre><code><span class="cm"># app/common/rate_limit.py</span>
+<span class="cm"># Học trực tiếp từ vuonglearning rate_limit.py:88</span>
+_RATE_LIMIT_LUA = <span class="st">"""
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[1])
+end
+return current
+"""</span>
+
+<span class="cm"># Tại sao Lua thay vì INCR + EXPIRE riêng?</span>
+<span class="cm"># Race condition nếu tách:</span>
+<span class="cm">#   Process A: INCR key → 1</span>
+<span class="cm">#   Process B: INCR key → 2</span>
+<span class="cm">#   Process A: EXPIRE key 60  ← set TTL</span>
+<span class="cm">#   Process B: EXPIRE key 60  ← reset TTL! window bị kéo dài</span>
+<span class="cm"># Lua: 2 lệnh chạy atomically = không bị interrupt giữa chừng</span></code></pre>
+
+      <h3>Áp dụng vào router</h3>
+      <pre><code><span class="cm"># app/ai/router.py</span>
+<span class="dc">@router.post</span>(<span class="st">"/books/{book_id}/summarize"</span>)
+<span class="kw">async def</span> <span class="fn">summarize</span>(book_id: <span class="nm">int</span>, request: Request, db = Depends(get_db)):
+    <span class="kw">await</span> check_ai_rate_limit(request)   <span class="cm"># raise 429 nếu > 20/60s</span>
+    <span class="kw">return await</span> service.summarize(book_id, db)</code></pre>
+
+      <h3>Flow khi vượt limit</h3>
+      <div class="flow">IP 192.168.1.1  →  POST /ai/books/1/summarize  →  counter=1   ✓
+IP 192.168.1.1  →  POST /ai/books/2/summarize  →  counter=2   ✓
+...
+IP 192.168.1.1  →  POST /ai/books/20/summarize →  counter=20  ✓
+IP 192.168.1.1  →  POST /ai/books/21/summarize →  counter=21  ✗ 429
+
+<span style="color:#7c8ba3">Sau 60s: key tự expire → counter reset → lại cho phép</span></div>
+
+      <div class="callout tip">
+        <span class="callout-icon">★</span>
+        <div>
+          <strong>Fail-open:</strong> Nếu Redis down → cho request qua, không block user.
+          Học từ vuonglearning: availability quan trọng hơn strict rate enforcement.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PATTERN 3: ASYNC QUEUE -->
+  <div class="section">
+    <div class="section-header">
+      <span class="num purple">3</span>
+      <h2>Async Queue (bài 154–162) — RAG indexing không timeout</h2>
+    </div>
+    <div class="body">
+
+      <h3>Vấn đề: PDF indexing mất 30–120 giây</h3>
+      <div class="flow">SYNC (bad):
+  POST /ai/rag/books/1/index  →  load PDF  →  split 1200 chunks  →  embed × 1200  →  ChromaDB
+  |←─────────────────────────────── 90 giây ────────────────────────────────────────→|
+  Nginx timeout sau 30s  →  504 Gateway Timeout  →  kết quả mất
+
+ASYNC (good):
+  POST /ai/rag/books/1/index/async  →  enqueue job  →  {"job_id": "abc-123"}
+  |←────── &lt;100ms ──────────────────→|
+
+  [Worker process riêng — không có HTTP connection, không có timeout]
+  Worker:  load PDF  →  split  →  embed × 1200  →  ChromaDB  →  save result
+  |←─────────────────────────── 90 giây thoải mái ──────────────────────────────→|
+
+  GET /ai/rag/jobs/abc-123  →  {"status": "started"}
+  GET /ai/rag/jobs/abc-123  →  {"status": "finished", "result": {...}}</div>
+
+      <h3>3 components</h3>
+      <pre><code><span class="cm"># app/queue.py — RQ Queue singleton</span>
+redis_conn = Redis.from_url(settings.redis_url)   <span class="cm"># sync Redis (RQ không dùng asyncio)</span>
+rag_queue = Queue(settings.rag_queue_name, connection=redis_conn)
+
+<span class="cm"># app/ai/rag/tasks.py — function chạy trong worker</span>
+<span class="kw">def</span> <span class="fn">index_book_pdf_task</span>(book_id, file_bytes, filename) -> <span class="nm">dict</span>:
+    <span class="cm"># asyncio.run() vì service là async def, worker là sync process</span>
+    result = asyncio.run(service.index_book_pdf(book_id, file_bytes, filename, db))
+    <span class="kw">return</span> result.model_dump()
+
+<span class="cm"># worker.py — entry point, chạy song song với FastAPI</span>
+worker = Worker([Queue(<span class="st">"rag-indexing"</span>, conn)], connection=conn)
+worker.work(with_scheduler=<span class="kw">True</span>)</code></pre>
+
+      <h3>Enqueue endpoint</h3>
+      <pre><code><span class="cm"># app/ai/rag/router.py</span>
+<span class="dc">@router.post</span>(<span class="st">"/books/{book_id}/index/async"</span>, status_code=<span class="nm">202</span>)
+<span class="kw">async def</span> <span class="fn">index_book_async</span>(book_id, file: UploadFile):
+    file_bytes = <span class="kw">await</span> file.read()
+    job = get_rag_queue().enqueue(
+        index_book_pdf_task,          <span class="cm"># importable function</span>
+        book_id, file_bytes, file.filename,
+        job_timeout=<span class="nm">300</span>,              <span class="cm"># worker có 5 phút</span>
+        result_ttl=<span class="nm">3600</span>,              <span class="cm"># giữ result 1h</span>
+    )
+    <span class="kw">return</span> {<span class="st">"job_id"</span>: job.id, <span class="st">"status"</span>: <span class="st">"queued"</span>}</code></pre>
+
+      <h3>Poll endpoint</h3>
+      <pre><code><span class="dc">@router.get</span>(<span class="st">"/jobs/{job_id}"</span>)
+<span class="kw">def</span> <span class="fn">get_job_status</span>(job_id):
+    job = Job.fetch(job_id, connection=get_redis_sync())
+    status = job.get_status()
+
+    <span class="kw">if</span> status == JobStatus.FINISHED:
+        <span class="kw">return</span> {<span class="st">"status"</span>: <span class="st">"finished"</span>, <span class="st">"result"</span>: job.result}
+    <span class="kw">if</span> status == JobStatus.FAILED:
+        <span class="kw">return</span> {<span class="st">"status"</span>: <span class="st">"failed"</span>, <span class="st">"error"</span>: job.latest_result().exc_string}
+    <span class="kw">return</span> {<span class="st">"status"</span>: status.value}   <span class="cm"># "queued" | "started"</span></code></pre>
+
+      <h3>Scale workers (bài 162)</h3>
+      <pre><code><span class="cm"># 1 worker = 1 job tại 1 thời điểm</span>
+python worker.py    <span class="cm"># Terminal 1</span>
+python worker.py    <span class="cm"># Terminal 2  → 2 jobs song song</span>
+python worker.py    <span class="cm"># Terminal 3  → 3 jobs song song</span>
+
+<span class="cm"># Hoặc Docker</span>
+docker compose up --scale worker=<span class="nm">3</span></code></pre>
+    </div>
+  </div>
+
+  <!-- COMPARE vuonglearning vs book-management -->
+  <div class="section">
+    <div class="section-header">
+      <span class="num">∑</span>
+      <h2>So sánh: vuonglearning vs book-management</h2>
+    </div>
+    <div class="body">
+      <table>
+        <tr><th>Điểm</th><th>vuonglearning</th><th>book-management</th></tr>
+        <tr><td>Cache user</td><td><span class="ic">ilmu:user:{id}</span> TTL 60s<br>dependencies.py:41</td><td><span class="ic">bm:book:{id}</span> TTL 300s<br>books.py get_book()</td></tr>
+        <tr><td>Cache AI</td><td>image summary, search results<br>ai-service/cache.py</td><td>summary, description<br>ai/service.py</td></tr>
+        <tr><td>Rate limit</td><td>Lua script, per-route limits<br>signin=10, default=220</td><td>Lua script, AI only<br>20 req/60s per IP</td></tr>
+        <tr><td>Invalidate</td><td>cache_delete sau profile update<br>auth/service.py:919</td><td>cache_delete sau PUT/DELETE<br>books.py update_book()</td></tr>
+        <tr><td>Queue</td><td>FastAPI background_tasks<br>(fire-and-forget, same process)</td><td>RQ Worker<br>(separate process, persistent)</td></tr>
+        <tr><td>Async pattern</td><td>SSE streaming → không cần queue<br>(real-time, not batch)</td><td>PDF indexing → cần queue<br>(long-running, batch)</td></tr>
+        <tr><td>Redis slots</td><td>4 slots: api/ai/model-config/dapur</td><td>1 slot (project nhỏ)</td></tr>
+        <tr><td>Multi-tenant</td><td>PrefixedRedis wrapper<br>(preview-benny:ilmu:user:42)</td><td>Không cần (single tenant)</td></tr>
+        <tr><td>Fail-open</td><td>Có — Redis down → log warning, allow request</td><td>Có — cùng pattern</td></tr>
+      </table>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

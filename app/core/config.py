@@ -75,6 +75,27 @@ class Settings(BaseSettings):
     # ── RAG — token limits ────────────────────────────────────────────────────
     rag_max_tokens_summarize: int = 600         # tóm tắt từ chunks — nhiều hơn title-based
     rag_max_tokens_qa: int = 500                # Q&A từ chunks
+    rag_queue_name: str = "rag-indexing"        # RQ queue name cho async indexing
+    rag_job_timeout: int = 300                  # max 5 phút per indexing job
+    rag_result_ttl: int = 3600                  # giữ job result 1h trong Redis
+
+    # ── Redis ────────────────────────────────────────────────────────────────
+    # Học từ vuonglearning: mỗi service dùng slot riêng để tránh xung đột
+    # vuonglearning: slot 0=api, 1=ai-service, 2=model-config, 3=dapur
+    # book-management: slot 0 cho tất cả (project nhỏ, 1 service)
+    redis_url: str = "redis://localhost:6379/0"
+
+    # ── Cache TTL ─────────────────────────────────────────────────────────────
+    # Học từ vuonglearning: cache_user_ttl=60s, feature_flags=300s
+    # Book data ít thay đổi hơn user → TTL dài hơn
+    cache_book_ttl: int = 300                   # cache GET /books/{id} — 5 phút
+    cache_ai_result_ttl: int = 3600             # cache AI summary/description — 1 giờ
+
+    # ── Rate Limiting ─────────────────────────────────────────────────────────
+    # Học từ vuonglearning: per-route limits, fail-open khi Redis down
+    # AI endpoints gọi OpenAI tốn tiền → limit chặt hơn
+    rate_limit_ai_max: int = 20                 # tối đa 20 AI calls
+    rate_limit_ai_window: int = 60              # trong 60 giây
 
     # ── Derived properties ───────────────────────────────────────────────────
 

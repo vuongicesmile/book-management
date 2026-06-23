@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_db
 from app.core.decorators import log_duration, validate_pagination
 from app.core.notifications import notify_book_created, notify_book_deleted, notify_books_imported
+from app.common.redis import cache_delete, cache_get, cache_key, cache_set
+from app.core.config import settings
 from app.repositories import AuthorRepository, BookRepository, CategoryRepository
 from app.schemas.book import BookCreate, BookUpdate, Book as BookSchema
 
@@ -116,7 +118,20 @@ async def import_books_from_csv(file: UploadFile = File(...), db: Session = Depe
 
 @router.get("/{book_id}", response_model=BookSchema)
 async def get_book(book_id: int, db: Session = Depends(get_db)):
-    return BookRepository(db).get_by_id(book_id)
+    # Pattern 1: Cache — học từ vuonglearning dependencies.py
+    # vuonglearning: cache_get(f"ilmu:user:{user_id}") trước khi query DB
+    # book-management: cache_get("bm:book:42") trước khi query DB
+    key = cache_key("book", book_id)
+    cached = await cache_get(key)
+    if cached:
+        return cached                               # hit → trả về ngay, không query DB
+
+    book = BookRepository(db).get_by_id(book_id)   # miss → query DB
+    await cache_set(key, book.__dict__ | {          # lưu cache 5 phút
+        "author": {"id": book.author.id, "name": book.author.name},
+        "category": {"id": book.category.id, "name": book.category.name},
+    }, ttl=settings.cache_book_ttl)
+    return book
 
 
 @router.post("/", response_model=BookSchema, status_code=status.HTTP_201_CREATED)
@@ -138,12 +153,15 @@ async def create_book(book_in: BookCreate, db: Session = Depends(get_db)):
 
 @router.put("/{book_id}", response_model=BookSchema)
 async def update_book(book_id: int, book_in: BookUpdate, db: Session = Depends(get_db)):
-    return BookRepository(db).update(book_id, **book_in.model_dump(exclude_unset=True))
+    book = BookRepository(db).update(book_id, **book_in.model_dump(exclude_unset=True))
+    # Invalidate cache khi update — học từ vuonglearning auth/service.py:919
+    # vuonglearning: await cache_delete(f"ilmu:user:{user_id}") sau khi update profile
+    await cache_delete(cache_key("book", book_id))
+    return book
 
 
 @router.delete("/{book_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_book(book_id: int, db: Session = Depends(get_db)):
     BookRepository(db).delete(book_id)
-
-    # Fire-and-forget notify sau khi xóa
+    await cache_delete(cache_key("book", book_id))  # invalidate cache
     asyncio.create_task(notify_book_deleted(book_id))
