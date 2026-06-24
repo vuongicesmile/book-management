@@ -20,6 +20,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Request
+from fastapi.responses import StreamingResponse
 
 from app.agents.book_agent import get_book_agent
 from app.agents.memory import retrieve_memory_context
@@ -68,6 +69,51 @@ async def agent_chat(body: AgentChatRequest, request: Request) -> AgentChatRespo
         tool_calls=[ToolCallRecord(**tc) for tc in result["tool_calls"]],
         iterations=result["iterations"],
         memory_used=memory_context is not None,
+    )
+
+
+@router.post("/chat/stream", summary="Chat với BookAgent — SSE streaming")
+async def agent_chat_stream(body: AgentChatRequest, request: Request) -> StreamingResponse:
+    """Streaming version của /agents/chat.
+
+    Thay vì đợi LLM generate xong rồi trả về một lần,
+    endpoint này giữ HTTP connection mở và push từng token ngay khi có.
+
+    ## Response format
+
+    Content-Type: text/event-stream
+
+    Mỗi SSE event là một dòng "data: {json}\n\n":
+
+      data: {"type": "status", "data": {"action": "tool_start", "tool": "search_books"}}\n\n
+      data: {"choices": [{"delta": {"content": "Tôi "}}]}\n\n
+      data: {"choices": [{"delta": {"content": "tìm thấy"}}]}\n\n
+      data: {"type": "status", "data": {"action": "tool_done", "tool": "search_books"}}\n\n
+      data: [DONE]\n\n
+
+    ## Cách test bằng curl
+
+      curl -N -X POST http://localhost:8000/agents/chat/stream \\
+        -H "Content-Type: application/json" \\
+        -d '{"message": "Tìm sách Python"}'
+
+    -N = no-buffer, để thấy output real-time thay vì đợi kết thúc.
+    """
+    await check_ai_rate_limit(request)
+
+    user_id: str | None = body.user_id
+    if not user_id and request.client:
+        user_id = request.client.host
+
+    agent = get_book_agent()
+
+    return StreamingResponse(
+        agent.stream(body.message, user_id=user_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # tắt nginx buffering nếu có proxy
+        },
     )
 
 

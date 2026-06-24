@@ -61,10 +61,12 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import AsyncGenerator
 
 import httpx
 
 from app.agents.tools.registry import execute_tools_parallel, get_tool_schemas
+from app.common.sse import sse_done, sse_event, sse_line
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -372,3 +374,267 @@ class BaseAgent(ABC):
             raise RuntimeError(f"LLM API error {resp.status_code}: {resp.text[:200]}")
 
         return resp.json()
+
+    # ── SSE Streaming (bài 209) ──────────────────────────────────────────────
+
+    async def stream(
+        self,
+        user_message: str,
+        user_id: str | None = None,
+    ) -> AsyncGenerator[bytes, None]:
+        """Entry point streaming — giống chat() nhưng yield SSE bytes.
+
+        ## Tại sao cần stream() riêng thay vì dùng chat()?
+
+        chat()   → đợi LLM generate XONG → trả về string → response một lần
+        stream() → nhận từng token từ LLM → yield SSE bytes ngay → client đọc real-time
+
+        ## Flow
+
+        Input:  HTTP POST (toàn bộ message) — KHÔNG stream
+        Output: SSE stream (từng token) — yield liên tục đến [DONE]
+
+        ## SSE events được emit
+
+        {"type": "status", "data": {"action": "tool_start", "tool": "search_books"}}
+        {"choices": [{"delta": {"content": "Tôi tìm thấy..."}}]}   ← token text
+        {"type": "status", "data": {"action": "tool_done", "tool": "search_books"}}
+        [DONE]
+        """
+        if not settings.openai_api_key:
+            yield sse_line({"choices": [{"delta": {"content": "AI chưa được cấu hình."}}]})
+            yield sse_done()
+            return
+
+        # ── Build system prompt với memory (giống chat()) ─────────────────
+        system_content = self.system_prompt
+        if user_id:
+            system_content += f"\n\nUser ID hiện tại: {user_id}"
+        if user_id:
+            from app.agents.memory import retrieve_memory_context
+            memory_context = retrieve_memory_context(user_id)
+            if memory_context:
+                system_content += f"\n\nThông tin về người dùng này:\n{memory_context}"
+                yield sse_event("status", {"action": "memory_loaded", "user_id": user_id})
+
+        messages: list[dict] = [
+            {"role": "system", "content": system_content},
+            {"role": "user", "content": user_message},
+        ]
+        tool_schemas = get_tool_schemas(self.tools)
+
+        # ── Chạy streaming loop, thu thập answer để update memory ─────────
+        answer_parts: list[str] = []
+        async for chunk_bytes in self._tool_use_loop_stream(messages, tool_schemas, answer_parts):
+            yield chunk_bytes
+
+        # ── Background memory update (giống chat()) ────────────────────────
+        answer = "".join(answer_parts)
+        if user_id and answer:
+            from app.agents.memory import update_memory_background
+            asyncio.create_task(update_memory_background(user_id, user_message, answer))
+
+    async def _call_llm_streaming(
+        self,
+        messages: list[dict],
+        tool_schemas: list[dict],
+    ) -> AsyncGenerator[dict, None]:
+        """Gọi OpenAI API với stream=True — yield từng chunk dict.
+
+        ## Khác gì _call_llm()?
+
+        _call_llm():          stream=False → đợi full response → return dict
+        _call_llm_streaming(): stream=True  → yield từng chunk ngay khi có
+
+        ## OpenAI streaming format
+
+        Mỗi chunk là một dict:
+          {"choices": [{"delta": {"content": "Hello"}, "finish_reason": null}]}
+          {"choices": [{"delta": {"content": " world"}, "finish_reason": null}]}
+          {"choices": [{"delta": {}, "finish_reason": "stop"}]}
+
+        Hoặc khi LLM muốn gọi tool:
+          {"choices": [{"delta": {"tool_calls": [{"index": 0, "id": "call_abc",
+             "function": {"name": "search_books", "arguments": ""}}]}}]}
+          {"choices": [{"delta": {"tool_calls": [{"index": 0,
+             "function": {"arguments": "{\"query\":"}}]}}]}
+          {"choices": [{"delta": {"tool_calls": [{"index": 0,
+             "function": {"arguments": "\"Python\"}"}}]}}]}
+          {"choices": [{"delta": {}, "finish_reason": "tool_calls"}]}
+
+        ## Cơ chế httpx streaming
+
+        client.stream() giữ connection mở.
+        resp.aiter_lines() yield từng dòng text.
+        Mỗi dòng bắt đầu bằng "data: " — ta bỏ prefix và parse JSON.
+        """
+        headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
+        body: dict = {
+            "model": settings.openai_chat_model,
+            "messages": messages,
+            "stream": True,  # ← KEY DIFFERENCE
+        }
+        if tool_schemas:
+            body["tools"] = tool_schemas
+            body["tool_choice"] = "auto"
+
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                settings.openai_chat_completions_url,
+                headers=headers,
+                json=body,
+                timeout=60.0,
+            ) as resp:
+                if resp.status_code != 200:
+                    body_text = await resp.aread()
+                    raise RuntimeError(f"LLM API error {resp.status_code}: {body_text[:200]}")
+
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]  # bỏ "data: "
+                    if data.strip() == "[DONE]":
+                        return
+                    try:
+                        yield json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+
+    async def _tool_use_loop_stream(
+        self,
+        messages: list[dict],
+        tool_schemas: list[dict],
+        answer_parts: list[str],
+    ) -> AsyncGenerator[bytes, None]:
+        """Vòng lặp tool-use với SSE streaming.
+
+        ## Khác gì _tool_use_loop()?
+
+        _tool_use_loop():        buffer toàn bộ response → return string
+        _tool_use_loop_stream(): yield từng token ngay khi có → bytes ra client
+
+        ## Cách phát hiện tool_call round vs content round
+
+        OpenAI streaming: chunk đầu tiên có meaningful content sẽ là:
+          delta.tool_calls → LLM muốn gọi tool (tool round, KHÔNG stream ra client)
+          delta.content    → LLM đang trả lời (content round, STREAM ra client)
+
+        Chúng loại trừ nhau — một round chỉ là một trong hai.
+
+        ## Tool call rounds (không stream)
+
+        LLM gửi tool call JSON thành nhiều chunk nhỏ:
+          chunk 1: {"name": "search_books", "arguments": ""}
+          chunk 2: {"arguments": "{\"query\":"}
+          chunk 3: {"arguments": "\"Python\"}"}
+
+        Phải gom lại (accumulate) thành tool call hoàn chỉnh trước khi execute.
+
+        ## Content round (stream)
+
+        Yield từng token ngay khi nhận, format SSE:
+          data: {"choices": [{"delta": {"content": "Tôi "}}]}\n\n
+          data: {"choices": [{"delta": {"content": "tìm "}}]}\n\n
+          ...
+          data: [DONE]\n\n
+
+        Args:
+            messages:     Conversation history (mutated in-place)
+            tool_schemas: Tool definitions
+            answer_parts: List để accumulate answer text (cho memory update)
+        """
+        iteration = 0
+
+        while iteration < self.max_iterations:
+            iteration += 1
+            logger.debug("agent.stream.iteration", extra={"iteration": iteration})
+
+            # ── Xác định đây là tool round hay content round ──────────────
+            is_tool_round = False
+            tool_calls_acc: dict[int, dict] = {}  # index → accumulated tool call
+            content_acc: list[str] = []
+            finish_reason: str | None = None
+            first_delta_seen = False
+
+            async for chunk in self._call_llm_streaming(messages, tool_schemas):
+                choice = chunk["choices"][0]
+                delta = choice.get("delta", {})
+                chunk_finish = choice.get("finish_reason")
+                if chunk_finish:
+                    finish_reason = chunk_finish
+
+                # Bỏ qua chunk chỉ có role (chunk đầu tiên của OpenAI)
+                if not delta.get("tool_calls") and not delta.get("content"):
+                    continue
+
+                # ── Lần đầu thấy delta có nội dung: phân loại round ──────
+                if not first_delta_seen:
+                    first_delta_seen = True
+                    is_tool_round = bool(delta.get("tool_calls"))
+
+                if is_tool_round:
+                    # Gom tool call JSON từng mảnh theo index
+                    # OpenAI gửi từng đoạn nhỏ, cần ghép lại thành JSON hoàn chỉnh
+                    for tc_delta in delta.get("tool_calls", []):
+                        idx = tc_delta["index"]
+                        if idx not in tool_calls_acc:
+                            tool_calls_acc[idx] = {
+                                "id": "",
+                                "type": "function",
+                                "function": {"name": "", "arguments": ""},
+                            }
+                        tc = tool_calls_acc[idx]
+                        if tc_delta.get("id"):
+                            tc["id"] = tc_delta["id"]
+                        fn = tc_delta.get("function", {})
+                        if fn.get("name"):
+                            tc["function"]["name"] += fn["name"]
+                        if fn.get("arguments"):
+                            tc["function"]["arguments"] += fn["arguments"]
+                else:
+                    # Content round → stream từng token ra client ngay
+                    content = delta.get("content", "")
+                    if content:
+                        content_acc.append(content)
+                        yield sse_line({"choices": [{"delta": {"content": content}}]})
+
+            # ── Xử lý sau khi stream chunk hết ───────────────────────────
+            if is_tool_round:
+                # Tái tạo tool_calls list từ accumulator
+                tool_calls = [tool_calls_acc[i] for i in sorted(tool_calls_acc.keys())]
+
+                # Emit status event cho từng tool
+                for tc in tool_calls:
+                    tc_name = tc["function"]["name"]
+                    logger.info("agent.stream.tool_call", extra={"tool": tc_name})
+                    yield sse_event("status", {"action": "tool_start", "tool": tc_name})
+
+                # Lưu assistant message vào history (cần cho context LLM vòng sau)
+                messages.append({
+                    "role": "assistant",
+                    "content": None,
+                    "tool_calls": tool_calls,
+                })
+
+                # Execute tất cả tools song song
+                tool_results = await execute_tools_parallel(tool_calls, self.tools)
+                messages.extend(tool_results)
+
+                # Emit tool_done
+                for tc in tool_calls:
+                    yield sse_event("status", {"action": "tool_done", "tool": tc["function"]["name"]})
+
+                # Continue loop — LLM đọc kết quả tool và quyết định tiếp
+                continue
+
+            else:
+                # Content round xong → stream kết thúc
+                answer_parts.append("".join(content_acc))
+                yield sse_done()
+                return
+
+        # Max iterations exceeded
+        logger.warning("agent.stream.max_iterations", extra={"max": self.max_iterations})
+        yield sse_event("status", {"action": "error", "message": "Đã vượt quá số vòng lặp."})
+        yield sse_done()
