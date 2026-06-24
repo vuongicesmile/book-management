@@ -1,0 +1,653 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bài 177-188 — Memory Layer in AI Agents</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0d1117; --panel: #161b22; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e;
+      --blue: #58a6ff; --green: #3fb950; --yellow: #d29922;
+      --red: #f85149; --purple: #bc8cff; --orange: #ffa657;
+      --teal: #39d353;
+    }
+    body { background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif; line-height:1.6; padding:2rem 1rem; }
+    .container { max-width:1000px; margin:0 auto; }
+    h1 { font-size:2rem; font-weight:700; color:var(--blue); margin-bottom:.25rem; }
+    h2 { font-size:1.35rem; font-weight:600; color:var(--text); margin:2.5rem 0 1rem; border-bottom:1px solid var(--border); padding-bottom:.5rem; }
+    h3 { font-size:1.05rem; font-weight:600; color:var(--purple); margin:1.25rem 0 .5rem; }
+    .subtitle { color:var(--muted); margin-bottom:2rem; font-size:.9rem; }
+    .badge { display:inline-block; padding:.15rem .6rem; border-radius:20px; font-size:.72rem; font-weight:600; margin-right:.3rem; }
+    .bb { background:#1f3a5f; color:var(--blue); }
+    .bg { background:#1a3a2a; color:var(--green); }
+    .bo { background:#3a2800; color:var(--orange); }
+    .bp { background:#2d1f4f; color:var(--purple); }
+    pre { background:#010409; border:1px solid var(--border); border-radius:8px; padding:1.2rem; overflow-x:auto; font-size:.8rem; line-height:1.55; font-family:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace; }
+    code { background:#21262d; border-radius:4px; padding:.1rem .35rem; font-size:.82rem; font-family:"SFMono-Regular",Consolas,monospace; }
+    .card { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:1.2rem 1.4rem; margin-bottom:1rem; }
+    .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+    .grid3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:1rem; }
+    @media(max-width:680px) { .grid2,.grid3 { grid-template-columns:1fr; } }
+    table { width:100%; border-collapse:collapse; font-size:.85rem; }
+    th { background:#21262d; color:var(--muted); text-align:left; padding:.6rem 1rem; font-weight:600; }
+    td { padding:.6rem 1rem; border-top:1px solid var(--border); vertical-align:top; }
+    tr:hover td { background:#1c2128; }
+    .kw { color:var(--purple); } .fn { color:var(--blue); }
+    .str { color:var(--green); } .cm { color:var(--muted); font-style:italic; }
+    .num { color:var(--orange); } .ok { color:var(--green); font-weight:600; }
+    .no { color:var(--red); font-weight:600; }
+    .note { color:var(--yellow); font-size:.8rem; margin-top:.6rem; }
+    .flow { background:#010409; border:1px solid var(--border); border-radius:8px; padding:1.4rem; font-family:monospace; font-size:.82rem; line-height:1.85; overflow-x:auto; }
+    .sep { border:none; border-top:1px solid var(--border); margin:2.5rem 0; }
+    ul,ol { padding-left:1.5rem; } li { margin-bottom:.3rem; }
+    .mem-type { border-left:3px solid; padding-left:1rem; margin-bottom:1rem; }
+    .mem-type.short { border-color:var(--blue); }
+    .mem-type.long  { border-color:var(--green); }
+    .mem-type.fact  { border-color:var(--orange); }
+    .mem-type.ep    { border-color:var(--purple); }
+    .mem-type.sem   { border-color:var(--teal); }
+    .pill { display:inline-block; border-radius:4px; padding:.1rem .5rem; font-size:.75rem; font-weight:600; }
+    .pill-b { background:#1f3a5f; color:var(--blue); }
+    .pill-g { background:#1a3a2a; color:var(--green); }
+    .pill-r { background:#3a1a1a; color:var(--red); }
+    .pill-o { background:#3a2800; color:var(--orange); }
+    .arch-box { border:2px solid var(--border); border-radius:8px; padding:1rem; text-align:center; }
+    .arch-arrow { text-align:center; color:var(--blue); font-size:1.2rem; padding:.25rem 0; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>Memory Layer in AI Agents</h1>
+  <p class="subtitle">
+    <span class="badge bb">Bài 177–188</span>
+    <span class="badge bg">Theory</span>
+    <span class="badge bo">Mem0</span>
+    <span class="badge bp">Vector DB</span>
+    Cách AI nhớ thông tin người dùng qua nhiều cuộc hội thoại.
+  </p>
+
+  <!-- ═══ 1. TẠI SAO AGENT CẦN MEMORY ═══════════════════════════════════ -->
+  <h2>1. Tại sao Agent cần Memory?</h2>
+
+  <div class="grid2">
+    <div class="card">
+      <h3 style="color:var(--muted)">Không có memory</h3>
+      <div class="flow">Hôm nay:
+User: "Tôi thích sách Python"
+AI: "Hay nhé, tôi sẽ gợi ý sách..."
+
+Ngày mai:
+User: "Gợi ý sách cho tôi"
+AI: "Bạn thích thể loại gì?"
+<span class="no">← Không nhớ gì cả</span></div>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--green)">Có memory</h3>
+      <div class="flow">Hôm nay:
+User: "Tôi thích sách Python"
+AI: "OK, tôi nhớ rồi."
+[<span class="str">memory</span>: "Thích sách Python"]
+
+Ngày mai:
+User: "Gợi ý sách cho tôi"
+AI: "Dựa trên sở thích của bạn
+    về Python, tôi gợi ý..."
+<span class="ok">← Nhớ đúng, personalized</span></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:.75rem">
+    <p><strong>Memory</strong> = khả năng agent lưu và truy xuất thông tin vượt qua giới hạn của một cuộc hội thoại (context window).</p>
+    <p style="margin-top:.5rem;color:var(--muted)">Không có memory → mỗi chat là "người lạ" mới. Có memory → AI hiểu người dùng theo thời gian.</p>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══ 2. CÁC LOẠI MEMORY ═══════════════════════════════════════════ -->
+  <h2>2. Các loại Memory Architecture (Bài 178–184)</h2>
+
+  <div class="grid2">
+    <div>
+      <!-- Short-term -->
+      <div class="card mem-type short">
+        <h3 style="color:var(--blue)">Short-Term Memory <span class="pill pill-b">In-context</span></h3>
+        <p>Conversation history trong 1 chat session. Nằm trong <strong>context window</strong>.</p>
+        <pre style="margin-top:.7rem"><span class="cm"># Là messages list gửi cho LLM</span>
+messages = [
+  {<span class="str">"role"</span>: <span class="str">"system"</span>, ...},
+  {<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: <span class="str">"Tôi thích Python"</span>},
+  {<span class="str">"role"</span>: <span class="str">"assistant"</span>, ...},
+  {<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: <span class="str">"Gợi ý sách"</span>},
+]
+<span class="cm"># LLM đọc toàn bộ → nhớ trong session</span></pre>
+        <p class="note">⚡ Nhanh, free — nhưng chỉ tồn tại trong session hiện tại. Chat mới = mất hết.</p>
+      </div>
+
+      <!-- Long-term -->
+      <div class="card mem-type long" style="margin-top:0">
+        <h3 style="color:var(--green)">Long-Term Memory <span class="pill pill-g">External Storage</span></h3>
+        <p>Lưu ngoài vào DB/vector store, tồn tại mãi mãi (hoặc cho đến khi user xóa).</p>
+        <pre style="margin-top:.7rem"><span class="cm"># Trước mỗi chat → fetch từ DB</span>
+memory = db.get_user_memory(user_id)
+system_prompt = f<span class="str">"User info: {memory}"</span>
+
+<span class="cm"># Sau mỗi chat → update DB</span>
+db.save_memory(user_id, new_facts)</pre>
+        <p class="note">💾 Persistent cross-session. Cần DB. Cần chọn cái gì đáng nhớ.</p>
+      </div>
+    </div>
+
+    <div>
+      <!-- Factual -->
+      <div class="card mem-type fact">
+        <h3 style="color:var(--orange)">Factual Memory <span class="pill pill-o">Facts &amp; Profiles</span></h3>
+        <p>Sự kiện cụ thể về người dùng. Ví dụ: "tên là Vuong", "thích Python", "làm ở YTL".</p>
+        <pre style="margin-top:.7rem">facts = [
+  <span class="str">"Name is Vuong"</span>,
+  <span class="str">"Works at YTL AI Labs"</span>,
+  <span class="str">"Prefers Python over Java"</span>,
+]</pre>
+        <p class="note">📌 Source of truth. Discrete. Dễ edit từng fact.</p>
+      </div>
+
+      <!-- Episodic -->
+      <div class="card mem-type ep" style="margin-top:0">
+        <h3 style="color:var(--purple)">Episodic Memory <span class="pill" style="background:#2d1f4f;color:var(--purple)">Past Events</span></h3>
+        <p>Lịch sử sự kiện đã xảy ra. Ví dụ: "hôm qua hỏi về Django", "tuần trước tìm sách ML".</p>
+        <pre style="margin-top:.7rem">episodes = [
+  {<span class="str">"date"</span>: <span class="str">"2026-06-20"</span>, <span class="str">"topic"</span>: <span class="str">"Django"</span>},
+  {<span class="str">"date"</span>: <span class="str">"2026-06-18"</span>, <span class="str">"topic"</span>: <span class="str">"ML books"</span>},
+]</pre>
+        <p class="note">📅 Giúp agent hiểu context theo thời gian.</p>
+      </div>
+
+      <!-- Semantic -->
+      <div class="card mem-type sem" style="margin-top:0">
+        <h3 style="color:var(--teal)">Semantic Memory <span class="pill" style="background:#0d2a1a;color:var(--teal)">Vector Search</span></h3>
+        <p>Lưu dạng vector embedding. Tìm kiếm theo <em>nghĩa</em>, không phải từ khóa.</p>
+        <pre style="margin-top:.7rem"><span class="cm"># Query: "Python programming"</span>
+<span class="cm"># Tìm gần nhất trong vector space:</span>
+<span class="cm"># → "Sách về lập trình Python" ✓</span>
+<span class="cm"># → "Học coding với Python" ✓</span>
+<span class="cm"># → "Java tutorial" ✗ (xa)</span></pre>
+        <p class="note">🔍 RAG pattern. Scalable. Phù hợp knowledge base lớn.</p>
+      </div>
+    </div>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══ 3. SHORT-TERM: CONTEXT WINDOW MANAGEMENT ══════════════════════ -->
+  <h2>3. Short-Term Memory — Quản lý Context Window (Bài 180)</h2>
+
+  <div class="card">
+    <h3>Vấn đề: Context window có giới hạn</h3>
+    <div class="flow">GPT-4o-mini:  <span class="num">128,000</span> tokens (~100,000 từ)
+Claude Sonnet: <span class="num">200,000</span> tokens
+
+Conversation dài → vượt giới hạn → API lỗi hoặc tốn tiền.
+Giải pháp: cắt bớt messages cũ <span class="str">(truncation)</span> hoặc tóm tắt <span class="str">(summarization)</span>.</div>
+  </div>
+
+  <div class="grid2" style="margin-top:1rem">
+    <div class="card">
+      <h3>Truncation</h3>
+      <pre><span class="cm"># Giữ N messages gần nhất</span>
+MAX_HISTORY = <span class="num">20</span>
+
+<span class="kw">def</span> <span class="fn">trim_messages</span>(messages):
+    system = [m <span class="kw">for</span> m <span class="kw">in</span> messages
+              <span class="kw">if</span> m[<span class="str">"role"</span>] == <span class="str">"system"</span>]
+    history = [m <span class="kw">for</span> m <span class="kw">in</span> messages
+               <span class="kw">if</span> m[<span class="str">"role"</span>] != <span class="str">"system"</span>]
+    <span class="kw">return</span> system + history[-MAX_HISTORY:]</pre>
+      <p class="note">✅ Đơn giản. ❌ Mất context cũ hoàn toàn.</p>
+    </div>
+    <div class="card">
+      <h3>Summarization (Rolling)</h3>
+      <pre><span class="cm"># Tóm tắt messages cũ thành 1 đoạn</span>
+<span class="kw">if</span> token_count > THRESHOLD:
+    old = messages[:-<span class="num">10</span>]  <span class="cm"># messages cũ</span>
+    summary = llm.summarize(old)
+    messages = [
+      system_msg,
+      {<span class="str">"role"</span>: <span class="str">"system"</span>,
+       <span class="str">"content"</span>: f<span class="str">"Earlier: {summary}"</span>},
+      *messages[-<span class="num">10</span>:]   <span class="cm"># giữ 10 gần nhất</span>
+    ]</pre>
+      <p class="note">✅ Giữ tinh túy. ❌ Tốn thêm LLM call.</p>
+    </div>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══ 4. LONG-TERM: Mem0 ════════════════════════════════════════════ -->
+  <h2>4. Mem0 — Long-Term Memory Library (Bài 185–186)</h2>
+
+  <div class="card">
+    <p><strong>Mem0</strong> là thư viện Python giúp agent có long-term memory. Tự động extract facts từ conversation và lưu vào vector DB.</p>
+  </div>
+
+  <div class="grid2" style="margin-top:1rem">
+    <div class="card">
+      <h3>Setup cơ bản</h3>
+      <pre><span class="cm"># pip install mem0ai</span>
+<span class="kw">from</span> mem0 <span class="kw">import</span> Memory
+
+<span class="cm"># Cloud (dễ nhất)</span>
+m = Memory.from_config({
+    <span class="str">"api_key"</span>: <span class="str">"m0-xxxxx"</span>
+})
+
+<span class="cm"># Self-hosted với Qdrant</span>
+m = Memory.from_config({
+    <span class="str">"vector_store"</span>: {
+        <span class="str">"provider"</span>: <span class="str">"qdrant"</span>,
+        <span class="str">"config"</span>: {
+            <span class="str">"host"</span>: <span class="str">"localhost"</span>,
+            <span class="str">"port"</span>: <span class="num">6333</span>,
+        }
+    },
+    <span class="str">"llm"</span>: {
+        <span class="str">"provider"</span>: <span class="str">"openai"</span>,
+        <span class="str">"config"</span>: {
+            <span class="str">"model"</span>: <span class="str">"gpt-4o-mini"</span>,
+            <span class="str">"api_key"</span>: <span class="str">"sk-..."</span>
+        }
+    },
+})</pre>
+    </div>
+    <div class="card">
+      <h3>CRUD operations</h3>
+      <pre><span class="cm"># Thêm memory từ conversation</span>
+m.add(
+    messages=[
+        {<span class="str">"role"</span>: <span class="str">"user"</span>,
+         <span class="str">"content"</span>: <span class="str">"Tôi thích Python"</span>}
+    ],
+    user_id=<span class="str">"vuong_123"</span>,
+)
+
+<span class="cm"># Tìm memory liên quan</span>
+results = m.search(
+    query=<span class="str">"ngôn ngữ lập trình"</span>,
+    user_id=<span class="str">"vuong_123"</span>,
+)
+<span class="cm"># → [{"memory": "Thích Python", "score": 0.92}]</span>
+
+<span class="cm"># Lấy tất cả</span>
+all_mem = m.get_all(user_id=<span class="str">"vuong_123"</span>)
+
+<span class="cm"># Xóa</span>
+m.delete(memory_id=<span class="str">"mem_abc123"</span>)</pre>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:.75rem">
+    <h3>Tích hợp vào Agent</h3>
+    <pre><span class="kw">async def</span> <span class="fn">chat_with_memory</span>(user_id: str, user_message: str) -> str:
+    <span class="cm"># 1. Fetch relevant memories trước khi chat</span>
+    memories = m.search(query=user_message, user_id=user_id)
+    memory_context = <span class="str">"\n"</span>.join(r[<span class="str">"memory"</span>] <span class="kw">for</span> r <span class="kw">in</span> memories)
+
+    <span class="cm"># 2. Inject vào system prompt</span>
+    system = <span class="str">f"""Bạn là AI assistant.
+Những gì bạn biết về người dùng:
+{memory_context}"""</span>
+
+    <span class="cm"># 3. Gọi LLM</span>
+    response = <span class="kw">await</span> llm.chat([
+        {<span class="str">"role"</span>: <span class="str">"system"</span>, <span class="str">"content"</span>: system},
+        {<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: user_message},
+    ])
+
+    <span class="cm"># 4. Update memory sau khi chat</span>
+    m.add(messages=[
+        {<span class="str">"role"</span>: <span class="str">"user"</span>, <span class="str">"content"</span>: user_message},
+        {<span class="str">"role"</span>: <span class="str">"assistant"</span>, <span class="str">"content"</span>: response},
+    ], user_id=user_id)
+
+    <span class="kw">return</span> response</pre>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══ 5. VECTOR DB ═════════════════════════════════════════════════ -->
+  <h2>5. Vector Database — Semantic Memory (Bài 187–188)</h2>
+
+  <div class="card">
+    <h3>Tại sao Vector DB?</h3>
+    <div class="grid2">
+      <div>
+        <p style="color:var(--muted);margin-bottom:.5rem">SQL search (keyword):</p>
+        <pre>WHERE fact LIKE <span class="str">'%Python%'</span>
+<span class="cm"># Tìm "Thích lập trình Python" ✓</span>
+<span class="cm"># Không tìm được "Coding enthusiast" ✗</span></pre>
+      </div>
+      <div>
+        <p style="color:var(--muted);margin-bottom:.5rem">Vector search (meaning):</p>
+        <pre>query_vector = embed(<span class="str">"Python programmer"</span>)
+nearest = db.search(query_vector, top_k=<span class="num">3</span>)
+<span class="cm"># "Thích Python" ✓ (score: 0.95)</span>
+<span class="cm"># "Coding enthusiast" ✓ (score: 0.82)</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:.75rem">
+    <h3>Docker setup — Qdrant (dùng với Mem0)</h3>
+    <pre><span class="cm"># docker-compose.yml</span>
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - <span class="str">"6333:6333"</span>   <span class="cm"># REST API</span>
+      - <span class="str">"6334:6334"</span>   <span class="cm"># gRPC</span>
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+volumes:
+  qdrant_data:</pre>
+  </div>
+
+  <div class="card" style="margin-top:.75rem">
+    <h3>Qdrant Python client</h3>
+    <pre><span class="kw">from</span> qdrant_client <span class="kw">import</span> QdrantClient
+<span class="kw">from</span> qdrant_client.models <span class="kw">import</span> Distance, VectorParams, PointStruct
+<span class="kw">import</span> openai
+
+client = QdrantClient(host=<span class="str">"localhost"</span>, port=<span class="num">6333</span>)
+
+<span class="cm"># Tạo collection</span>
+client.create_collection(
+    collection_name=<span class="str">"user_memories"</span>,
+    vectors_config=VectorParams(
+        size=<span class="num">1536</span>,          <span class="cm"># OpenAI text-embedding-3-small</span>
+        distance=Distance.COSINE,
+    ),
+)
+
+<span class="cm"># Lưu memory với vector</span>
+<span class="kw">def</span> <span class="fn">embed</span>(text: str) -> list[float]:
+    resp = openai.embeddings.create(
+        input=text, model=<span class="str">"text-embedding-3-small"</span>
+    )
+    <span class="kw">return</span> resp.data[<span class="num">0</span>].embedding
+
+client.upsert(
+    collection_name=<span class="str">"user_memories"</span>,
+    points=[PointStruct(
+        id=<span class="num">1</span>,
+        vector=embed(<span class="str">"Thích lập trình Python"</span>),
+        payload={<span class="str">"text"</span>: <span class="str">"Thích lập trình Python"</span>, <span class="str">"user_id"</span>: <span class="str">"u1"</span>}
+    )],
+)
+
+<span class="cm"># Semantic search</span>
+hits = client.search(
+    collection_name=<span class="str">"user_memories"</span>,
+    query_vector=embed(<span class="str">"ngôn ngữ lập trình"</span>),
+    query_filter={<span class="str">"must"</span>: [{<span class="str">"key"</span>: <span class="str">"user_id"</span>, <span class="str">"match"</span>: {<span class="str">"value"</span>: <span class="str">"u1"</span>}}]},
+    limit=<span class="num">5</span>,
+)
+<span class="cm"># → [ScoredPoint(id=1, score=0.94, payload={"text":"Thích lập trình Python"})]</span></pre>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══ 6. VUONGLEARNING MEMORY ARCHITECTURE ══════════════════════════════ -->
+  <h2>6. Vuonglearning — Memory Architecture (Thực tế Production)</h2>
+
+  <div class="card" style="border-color:var(--blue)">
+    <h3 style="color:var(--blue)">Lịch sử: Mem0 → Custom Hybrid System</h3>
+    <div class="flow"><span class="cm">Giai đoạn 1 (cũ): Dùng Mem0</span>
+  - Vector DB (pgvector) + Mem0 library
+  - Tự động extract facts bằng Mem0
+  - Semantic search để retrieve
+
+<span class="cm">Giai đoạn 2 (hiện tại): Custom Hybrid v3</span>
+  - Bỏ Mem0 → tự build (migration f7a1b2c3d4e5)
+  - Lý do: cần control privacy (health data), custom categories, PII filter
+  - Architecture 2 tầng: Facts (discrete) + Summary (synthesized)</div>
+  </div>
+
+  <div style="margin-top:1rem">
+    <h3>Kiến trúc hiện tại: 2-Layer Hybrid</h3>
+    <div class="grid2">
+      <div class="card">
+        <h3 style="color:var(--orange)">Layer 1: Facts (Discrete)</h3>
+        <p style="font-size:.88rem;color:var(--muted);margin-bottom:.75rem">Bảng <code>user_memory_facts</code> — mỗi fact là 1 row</p>
+        <pre>{
+  <span class="str">"text"</span>: <span class="str">"Works at YTL AI Labs"</span>,
+  <span class="str">"category"</span>: <span class="str">"identity"</span>,
+  <span class="str">"source"</span>: <span class="str">"explicit"</span>,  <span class="cm"># user said "remember"</span>
+  <span class="str">"confidence"</span>: <span class="num">0.95</span>
+},
+{
+  <span class="str">"text"</span>: <span class="str">"Prefers Python"</span>,
+  <span class="str">"category"</span>: <span class="str">"preference"</span>,
+  <span class="str">"source"</span>: <span class="str">"extracted"</span>,  <span class="cm"># auto background</span>
+  <span class="str">"confidence"</span>: <span class="num">0.80</span>
+}</pre>
+        <p class="note">5 categories: identity, preference, project, context, relationship</p>
+      </div>
+      <div class="card">
+        <h3 style="color:var(--green)">Layer 2: Summary (Synthesized)</h3>
+        <p style="font-size:.88rem;color:var(--muted);margin-bottom:.75rem">Bảng <code>user_memories</code> — 1 row per user</p>
+        <pre><span class="str">"summary"</span>: <span class="str">"""User works at YTL AI Labs
+as a software engineer. Prefers
+Python and is currently learning
+AI agent architecture. Has been
+asking about Redis and book
+management systems."""</span>
+
+<span class="cm"># Generated FROM facts by LLM</span>
+<span class="cm"># Injected into system prompt</span></pre>
+        <p class="note">Max 2000 chars. Injected vào mỗi chat. Regenerated sau khi facts thay đổi.</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <h3>Flow hoàn chỉnh trong 1 cuộc hội thoại</h3>
+    <div class="flow"><span class="cm">── Trước khi chat ──────────────────────────────────────────────</span>
+<span class="num">1.</span> retrieve_memory_summary(user_id)
+   → fetch user_memories.summary từ DB (timeout 2s, fail-open)
+
+<span class="num">2.</span> Inject vào system prompt:
+   <span class="str">"Bạn biết những điều này về người dùng: {summary}"</span>
+
+<span class="cm">── Trong khi chat ──────────────────────────────────────────────</span>
+<span class="num">3.</span> User: <span class="str">"Nhớ rằng tôi thích sách Python"</span>
+   → LLM gọi tool: remember_this(fact=<span class="str">"Thích sách Python"</span>, category=<span class="str">"preference"</span>)
+   → POST /internal/v1/users/{id}/memories/facts
+   → Lưu vào user_memory_facts
+
+<span class="num">4.</span> Background: auto-extract facts từ conversation
+   (chạy ngầm, không block response)
+
+<span class="cm">── Sau khi chat ────────────────────────────────────────────────</span>
+<span class="num">5.</span> _rewrite_memory_background() — background task:
+   a. Đọc tất cả facts của user
+   b. Gọi LLM: <span class="str">"Viết tóm tắt từ các facts này"</span>
+   c. Update user_memories.summary (optimistic concurrency)
+
+<span class="cm">── Chat tiếp theo ──────────────────────────────────────────────</span>
+<span class="num">6.</span> Summary mới được inject vào chat mới → AI nhớ ngữ cảnh</div>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <h3>Privacy Features (quan trọng trong production)</h3>
+    <div class="grid2">
+      <div>
+        <h3 style="color:var(--red)">Health Data Filter</h3>
+        <pre><span class="cm"># health_filter.py</span>
+<span class="cm"># Không lưu: "có tiểu đường", "bị ung thư"</span>
+<span class="cm"># Tool trả về: "SAVE BLOCKED — health privacy"</span>
+<span class="kw">if</span> is_sensitive_health_data(fact):
+    <span class="kw">raise</span> ValidationError(
+        code=<span class="str">"memory.fact.health_data_blocked"</span>
+    )</pre>
+      </div>
+      <div>
+        <h3 style="color:var(--red)">Prompt Injection Guard</h3>
+        <pre><span class="cm"># service.py</span>
+_UNSAFE_PATTERNS = [
+    <span class="str">r"ignore\s+instructions"</span>,
+    <span class="str">r"ignore\s+all\s+previous"</span>,
+    <span class="str">r"override\s+system\s+prompt"</span>,
+    ...
+]
+<span class="cm"># Tránh memory poisoning attack</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══ 7. SO SÁNH ═══════════════════════════════════════════════════ -->
+  <h2>7. So sánh các approach</h2>
+
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr><th>Approach</th><th>Storage</th><th>Retrieval</th><th>Dùng khi</th><th>Ví dụ</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>In-context</strong><br>(short-term)</td>
+          <td>Messages list</td>
+          <td>Tự động (LLM đọc)</td>
+          <td>Conversation đang diễn ra</td>
+          <td>Chat history trong 1 session</td>
+        </tr>
+        <tr>
+          <td><strong>Summary</strong><br>(long-term)</td>
+          <td>PostgreSQL TEXT</td>
+          <td>Fetch by user_id → inject</td>
+          <td>Personal context cross-session</td>
+          <td>Vuonglearning user_memories</td>
+        </tr>
+        <tr>
+          <td><strong>Discrete Facts</strong></td>
+          <td>PostgreSQL rows</td>
+          <td>Fetch by user_id → filter</td>
+          <td>Editable, auditable memory</td>
+          <td>Vuonglearning user_memory_facts</td>
+        </tr>
+        <tr>
+          <td><strong>Mem0</strong></td>
+          <td>Vector DB + SQL</td>
+          <td>Semantic similarity search</td>
+          <td>Auto extract + semantic recall</td>
+          <td>Vuonglearning (giai đoạn 1, đã thay)</td>
+        </tr>
+        <tr>
+          <td><strong>Vector DB only</strong></td>
+          <td>Qdrant/Pinecone/pgvector</td>
+          <td>ANN search by embedding</td>
+          <td>Large knowledge base, RAG</td>
+          <td>Book content search trong RAG</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══ 8. ÁP DỤNG VÀO BOOK-MANAGEMENT ══════════════════════════════ -->
+  <h2>8. Áp dụng vào Book-Management</h2>
+
+  <div class="card" style="border-color:var(--green)">
+    <h3 style="color:var(--green)">Phù hợp nhất: Simple Summary Memory</h3>
+    <p>Giống vuonglearning nhưng đơn giản hơn — lưu sở thích đọc sách của user, inject vào BookAgent.</p>
+  </div>
+
+  <div class="card" style="margin-top:1rem">
+    <h3>Plan: UserReadingProfile</h3>
+    <pre><span class="cm"># Bảng DB: user_reading_profiles</span>
+<span class="kw">class</span> <span class="fn">UserReadingProfile</span>(Base):
+    user_id: str            <span class="cm"># identifier (IP hoặc session ID)</span>
+    preferences: str        <span class="cm"># "Thích sách Python, thể loại tech"</span>
+    recently_asked: str     <span class="cm"># "Hỏi về ML books tuần trước"</span>
+    updated_at: datetime</pre>
+
+    <pre style="margin-top:.75rem"><span class="cm"># BookAgent sẽ dùng:</span>
+<span class="kw">async def</span> <span class="fn">chat</span>(self, user_id: str, message: str):
+    <span class="cm"># 1. Fetch profile</span>
+    profile = db.get_profile(user_id)
+
+    <span class="cm"># 2. Enhanced system prompt</span>
+    system = <span class="str">f"""Bạn là thư viện viên AI.
+Sở thích người dùng: {profile.preferences}
+Lịch sử gần đây: {profile.recently_asked}"""</span>
+
+    <span class="cm"># 3. Run agent với context</span>
+    result = <span class="kw">await</span> self._tool_use_loop(messages, tool_schemas)
+
+    <span class="cm"># 4. Update profile ngầm sau chat</span>
+    asyncio.create_task(update_profile(user_id, message, result))</pre>
+  </div>
+
+  <div class="grid2" style="margin-top:1rem">
+    <div class="card">
+      <h3 style="color:var(--orange)">Tool: save_preference</h3>
+      <pre><span class="fn">@register_tool</span>(
+    name=<span class="str">"save_preference"</span>,
+    description=<span class="str">"Nhớ sở thích đọc sách"</span>,
+    parameters={...}
+)
+<span class="kw">async def</span> save_preference(
+    preference: str, user_id: str
+) -> str:
+    db.upsert_preference(user_id, preference)
+    <span class="kw">return</span> <span class="str">f"Đã nhớ: {preference}"</span></pre>
+    </div>
+    <div class="card">
+      <h3 style="color:var(--blue)">User Experience</h3>
+      <pre><span class="cm">Session 1:</span>
+User: <span class="str">"Tôi thích sách tech"</span>
+Agent: <span class="str">"Đã nhớ sở thích của bạn"</span>
+
+<span class="cm">Session 2 (ngày mai):</span>
+User: <span class="str">"Gợi ý sách cho tôi"</span>
+Agent: <span class="str">"Dựa trên sở thích tech
+của bạn, đây là gợi ý..."</span></pre>
+    </div>
+  </div>
+
+  <hr class="sep" />
+
+  <!-- ═══ 9. QUICK REFERENCE ════════════════════════════════════════════ -->
+  <h2>9. Quick Reference — Chọn loại Memory nào?</h2>
+
+  <div class="card">
+    <div class="flow"><span class="kw">if</span> cần nhớ trong session hiện tại:
+    → Short-term (messages list)   <span class="cm"># free, đã có sẵn</span>
+
+<span class="kw">elif</span> cần nhớ cross-session, đơn giản:
+    → Summary in PostgreSQL        <span class="cm"># text column, inject vào system prompt</span>
+
+<span class="kw">elif</span> cần facts riêng lẻ, user có thể edit:
+    → Discrete facts table         <span class="cm"># như vuonglearning user_memory_facts</span>
+
+<span class="kw">elif</span> cần tìm kiếm theo nghĩa (semantic search):
+    → Vector DB (Qdrant / pgvector) <span class="cm"># dùng cho knowledge base lớn</span>
+
+<span class="kw">elif</span> muốn all-in-one, không tự build:
+    → Mem0 library                 <span class="cm"># auto extract + vector search</span>
+
+<span class="kw">elif</span> production với privacy requirements:
+    → Custom hybrid                <span class="cm"># như vuonglearning: facts + summary + filters</span></div>
+  </div>
+
+  <div style="text-align:center;color:var(--muted);font-size:.78rem;margin-top:3rem;padding-top:1rem;border-top:1px solid var(--border)">
+    book-management learning · bài 177–188 memory layer in AI agents
+  </div>
+
+</div>
+</body>
+</html>
