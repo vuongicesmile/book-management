@@ -58,6 +58,11 @@ def learning_index():
     <span class="badge">Bài 177–188</span> Memory Layer in AI Agents
     <div class="desc">Short-term vs long-term, Mem0, Vector DB, UserReadingProfile</div>
   </a>
+
+  <a href="/static/docs/mcp-architecture.html">
+    <span class="badge">Bài 207–208</span> Model Context Protocol (MCP)
+    <div class="desc">Architecture, Host/Client/Server, JSON-RPC, vuonglearning dev env MCP usage</div>
+  </a>
 </body>
 </html>"""
 

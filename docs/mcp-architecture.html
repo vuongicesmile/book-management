@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bài 207-208: Model Context Protocol (MCP)</title>
+  <style>
+    :root {
+      --bg: #0d1117; --surface: #161b22; --border: #30363d;
+      --text: #e6edf3; --muted: #8b949e; --blue: #58a6ff;
+      --green: #3fb950; --orange: #d29922; --red: #f85149;
+      --purple: #bc8cff; --teal: #39d353;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg); color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 15px; line-height: 1.7;
+      max-width: 860px; margin: 0 auto; padding: 2rem 1.5rem 4rem;
+    }
+    h1 { color: var(--blue); font-size: 1.8rem; margin-bottom: .4rem; }
+    h2 { color: var(--blue); font-size: 1.25rem; margin: 2.4rem 0 .8rem; border-bottom: 1px solid var(--border); padding-bottom: .4rem; }
+    h3 { color: var(--teal); font-size: 1rem; margin: 1.4rem 0 .5rem; }
+    p { margin-bottom: .9rem; }
+    code { background: #1c2128; color: var(--blue); padding: .15em .4em; border-radius: 4px; font-family: "SF Mono", Consolas, monospace; font-size: .88em; }
+    pre {
+      background: #1c2128; border: 1px solid var(--border); border-radius: 8px;
+      padding: 1.1rem; overflow-x: auto; margin: 1rem 0 1.4rem;
+      font-family: "SF Mono", Consolas, monospace; font-size: .86em; line-height: 1.6;
+    }
+    pre .c { color: #6e7681; }
+    pre .k { color: var(--purple); }
+    pre .s { color: var(--green); }
+    pre .n { color: var(--blue); }
+    pre .v { color: var(--orange); }
+    .badge {
+      display: inline-block; border-radius: 20px; padding: .15rem .65rem;
+      font-size: .75rem; font-weight: 600; margin-right: .35rem;
+    }
+    .b-blue { background: #1f3a5f; color: var(--blue); }
+    .b-green { background: #1a3a2a; color: var(--green); }
+    .b-orange { background: #3a2a10; color: var(--orange); }
+    .b-purple { background: #2a1f3a; color: var(--purple); }
+    .b-red { background: #3a1a1a; color: var(--red); }
+    .callout {
+      border-left: 3px solid var(--blue); background: #161f2e;
+      padding: .9rem 1.1rem; border-radius: 0 6px 6px 0; margin: 1.2rem 0;
+    }
+    .callout.warn { border-color: var(--orange); background: #1e1a10; }
+    .callout.success { border-color: var(--green); background: #101e14; }
+    .callout strong { color: var(--blue); }
+    .callout.warn strong { color: var(--orange); }
+    .callout.success strong { color: var(--green); }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0 1.4rem; font-size: .9em; }
+    th { background: #1c2128; color: var(--muted); text-align: left; padding: .6rem .9rem; border: 1px solid var(--border); font-weight: 600; }
+    td { padding: .55rem .9rem; border: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: #0f1419; }
+    .diagram {
+      background: #1c2128; border: 1px solid var(--border); border-radius: 8px;
+      padding: 1.4rem; margin: 1rem 0 1.4rem;
+      font-family: "SF Mono", Consolas, monospace; font-size: .82em; line-height: 1.9;
+      white-space: pre; overflow-x: auto;
+    }
+    .subtitle { color: var(--muted); margin-bottom: 2rem; }
+    .section-num { color: var(--orange); font-size: .78rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; margin-bottom: .2rem; }
+    a { color: var(--blue); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0 1.4rem; }
+    .box { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.1rem; }
+    .box h4 { color: var(--teal); margin-bottom: .5rem; font-size: .95rem; }
+    @media(max-width:600px) { .two-col { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+
+<div class="section-num">Bài 207-208</div>
+<h1>Model Context Protocol (MCP)</h1>
+<p class="subtitle">Chuẩn giao tiếp mở giữa AI models và external tools / data sources</p>
+
+<!-- ═══ 1. MCP LÀ GÌ ═══ -->
+<h2>1. MCP là gì? (Bài 207)</h2>
+
+<p>
+  <strong>Model Context Protocol (MCP)</strong> là một <em>open standard</em> do Anthropic phát hành
+  năm 2024. Nó định nghĩa cách một AI model "nói chuyện" với external systems
+  (databases, GitHub, Slack, filesystem, v.v.) thông qua một giao thức chuẩn hóa.
+</p>
+
+<div class="callout">
+  <strong>Tư tưởng cốt lõi:</strong> Trước MCP, mỗi AI app phải tự tích hợp riêng với từng
+  tool — custom code, custom format, custom auth. MCP giống như <strong>USB-C cho AI</strong>:
+  một cổng chuẩn để kết nối bất kỳ AI nào với bất kỳ data source nào.
+</div>
+
+<h3>Vấn đề MCP giải quyết</h3>
+
+<div class="two-col">
+  <div class="box">
+    <h4>❌ Trước MCP</h4>
+    <p style="color:var(--muted);font-size:.9rem;">Mỗi app tự build integration:</p>
+    <pre style="margin:0;font-size:.78em;">ChatApp_A → GitHub API (custom)
+ChatApp_B → GitHub API (custom)
+ChatApp_C → GitHub API (custom)
+<span class="c"># 3 apps × N tools = 3N integrations</span></pre>
+  </div>
+  <div class="box">
+    <h4>✅ Với MCP</h4>
+    <p style="color:var(--muted);font-size:.9rem;">Một server, nhiều clients dùng:</p>
+    <pre style="margin:0;font-size:.78em;">ChatApp_A ─┐
+ChatApp_B ─┼─→ MCP Server (GitHub)
+ChatApp_C ─┘
+<span class="c"># N apps × 1 server = 1 integration</span></pre>
+  </div>
+</div>
+
+<h3>MCP không phải là...</h3>
+
+<table>
+  <tr><th>Khái niệm dễ nhầm</th><th>Sự thật</th></tr>
+  <tr>
+    <td>Function calling / tool use</td>
+    <td>Function calling là cách LLM <em>quyết định</em> gọi tool. MCP là cách tool <em>được expose</em> cho LLM. MCP thường dùng <em>qua</em> function calling.</td>
+  </tr>
+  <tr>
+    <td>Plugin system</td>
+    <td>MCP là transport protocol. Plugin system có thể build trên MCP, nhưng chúng không giống nhau.</td>
+  </tr>
+  <tr>
+    <td>API</td>
+    <td>MCP là protocol hai chiều (bidirectional), không phải REST API một chiều.</td>
+  </tr>
+  <tr>
+    <td>LangChain / LangGraph</td>
+    <td>LangChain là orchestration framework. MCP là transport layer. Có thể dùng cả hai cùng nhau.</td>
+  </tr>
+</table>
+
+<!-- ═══ 2. KIẾN TRÚC MCP ═══ -->
+<h2>2. Kiến trúc MCP (Bài 208)</h2>
+
+<p>MCP có 3 thành phần chính: <strong>Host</strong>, <strong>Client</strong>, và <strong>Server</strong>.</p>
+
+<div class="diagram">┌─────────────────────────────────────────────────────────────────┐
+│                         HOST                                    │
+│  (Claude Desktop, Claude Code, VS Code, custom AI app...)       │
+│                                                                 │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐     │
+│  │  MCP Client  │    │  MCP Client  │    │  MCP Client  │     │
+│  │     (1)      │    │     (2)      │    │     (3)      │     │
+│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘     │
+│         │                   │                   │              │
+└─────────┼───────────────────┼───────────────────┼─────────────┘
+          │ JSON-RPC 2.0       │ JSON-RPC 2.0       │ JSON-RPC 2.0
+          │ (stdio / SSE)      │ (stdio / SSE)      │ (stdio / SSE)
+          ▼                   ▼                   ▼
+┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
+│   MCP Server    │  │   MCP Server    │  │   MCP Server    │
+│    (GitHub)     │  │  (PostgreSQL)   │  │  (Filesystem)   │
+│                 │  │                 │  │                 │
+│ Tools:          │  │ Tools:          │  │ Resources:      │
+│ - search_repos  │  │ - run_query     │  │ - read_file     │
+│ - create_issue  │  │ - list_tables   │  │ - list_dir      │
+│ - get_pr        │  │ - describe_db   │  │ - write_file    │
+└─────────────────┘  └─────────────────┘  └─────────────────┘</div>
+
+<h3>Host</h3>
+<p>
+  Ứng dụng chứa AI model. Ví dụ: Claude Desktop, Claude Code, VS Code Copilot.
+  Host quản lý vòng đời của các MCP clients và quyết định tools nào được expose cho model.
+</p>
+
+<h3>MCP Client</h3>
+<p>
+  Thành phần chạy <em>bên trong</em> Host. Mỗi client duy trì <strong>một kết nối 1:1</strong>
+  với một MCP Server. Client xử lý protocol handshake, capability negotiation, và message routing.
+</p>
+
+<h3>MCP Server</h3>
+<p>
+  Process nhỏ (có thể là Node.js, Python, Rust...) expose ba loại tài nguyên:
+</p>
+
+<table>
+  <tr><th>Loại</th><th>Mô tả</th><th>Ví dụ</th></tr>
+  <tr>
+    <td><span class="badge b-blue">Tools</span></td>
+    <td>Hàm có thể gọi (model-controlled). LLM quyết định khi nào gọi.</td>
+    <td><code>search_repos</code>, <code>run_query</code>, <code>send_message</code></td>
+  </tr>
+  <tr>
+    <td><span class="badge b-green">Resources</span></td>
+    <td>Dữ liệu có thể đọc (application-controlled). Host quyết định khi nào đọc.</td>
+    <td>File contents, database rows, API responses</td>
+  </tr>
+  <tr>
+    <td><span class="badge b-purple">Prompts</span></td>
+    <td>Templates đã định sẵn (user-controlled). Người dùng chọn dùng.</td>
+    <td>"Review this PR", "Explain this SQL"</td>
+  </tr>
+</table>
+
+<h3>Transport: JSON-RPC 2.0</h3>
+<p>
+  Mọi giao tiếp trong MCP dùng <strong>JSON-RPC 2.0</strong> — format đơn giản, stateless,
+  dễ debug. Hai loại transport:
+</p>
+
+<div class="two-col">
+  <div class="box">
+    <h4>stdio (local)</h4>
+    <p style="color:var(--muted);font-size:.88rem;">
+      Host spawn MCP Server dưới dạng child process.<br>
+      Giao tiếp qua stdin/stdout.<br>
+      <span style="color:var(--green)">✓ Zero network overhead</span><br>
+      <span style="color:var(--green)">✓ Simple, secure (local only)</span><br>
+      <span style="color:var(--orange)">○ Chỉ local</span>
+    </p>
+  </div>
+  <div class="box">
+    <h4>SSE / HTTP (remote)</h4>
+    <p style="color:var(--muted);font-size:.88rem;">
+      Host kết nối đến remote MCP Server qua HTTP + SSE.<br>
+      Server gửi events, client gửi POST requests.<br>
+      <span style="color:var(--green)">✓ Remote servers</span><br>
+      <span style="color:var(--green)">✓ Multi-client, shared state</span><br>
+      <span style="color:var(--orange)">○ Cần auth, network</span>
+    </p>
+  </div>
+</div>
+
+<h3>Lifecycle của một tool call qua MCP</h3>
+
+<div class="diagram">User: "Tìm PR nào đang open trong repo ilmuchat"
+      │
+      ▼
+Host (Claude Code)
+  → LLM nhận prompt + tool list từ MCP Server (GitHub)
+  → LLM quyết định gọi: search_pull_requests({repo: "ilmuchat", state: "open"})
+      │
+      ▼ JSON-RPC request qua stdio
+MCP Server (GitHub)
+  → Validate params
+  → Gọi GitHub REST API
+  → Format kết quả
+  → Trả về JSON-RPC response
+      │
+      ▼
+Host (Claude Code)
+  → Inject tool result vào conversation
+  → LLM đọc kết quả → viết câu trả lời cho user</div>
+
+<!-- ═══ 3. VUONGLEARNING SỬ DỤNG MCP ═══ -->
+<h2>3. Vuonglearning dùng MCP như thế nào?</h2>
+
+<div class="callout warn">
+  <strong>Phân biệt quan trọng:</strong> Có hai ngữ cảnh hoàn toàn khác nhau khi nói về MCP
+  trong dự án này.
+</div>
+
+<h3>A. Môi trường phát triển (Claude Code) — CÓ dùng MCP</h3>
+
+<p>
+  Claude Code (tool AI dùng để <em>viết code</em> cho vuonglearning) cấu hình các MCP servers
+  trong <code>~/.claude/settings.json</code> và <code>.claude/settings.local.json</code>.
+  Đây là công cụ cho <em>developer</em>, không phải cho <em>end user</em>.
+</p>
+
+<table>
+  <tr><th>MCP Server</th><th>Transport</th><th>Tools expose</th><th>Dùng để</th></tr>
+  <tr>
+    <td><code>plugin_ytlailabs_github</code></td>
+    <td>SSE</td>
+    <td><code>get_pull_request</code>, <code>create_issue</code>, <code>search_code</code>...</td>
+    <td>Claude Code đọc PR, tạo issue, tìm code trong repo</td>
+  </tr>
+  <tr>
+    <td><code>plugin_ytlailabs_playwright</code></td>
+    <td>SSE</td>
+    <td><code>browser_navigate</code>, <code>browser_screenshot</code>...</td>
+    <td>E2E testing, UI verification trong quá trình dev</td>
+  </tr>
+  <tr>
+    <td><code>plugin_ytlailabs_context7</code></td>
+    <td>SSE</td>
+    <td><code>resolve-library-id</code>, <code>query-docs</code></td>
+    <td>Tra cứu docs của FastAPI, SQLAlchemy, Next.js khi code</td>
+  </tr>
+  <tr>
+    <td><code>plugin_ytlailabs_exa</code></td>
+    <td>SSE</td>
+    <td><code>web_search_exa</code>, <code>web_fetch_exa</code></td>
+    <td>Web search khi cần tìm solutions, examples</td>
+  </tr>
+</table>
+
+<h3>B. Runtime của app (vuonglearning product) — KHÔNG dùng MCP</h3>
+
+<p>
+  Vuonglearning (ứng dụng chat AI cho người dùng cuối) <strong>không dùng MCP protocol</strong>
+  ở runtime. Thay vào đó, nó có hệ thống tool riêng:
+</p>
+
+<div class="diagram">vuonglearning runtime architecture:
+
+ai-service
+  └── agents/
+       ├── chat/agent.py   ← ChatAgent (5300+ lines)
+       ├── registry.py     ← AGENT_REGISTRY (custom)
+       └── tools/
+            ├── web_search_tool.py    ← tích hợp SerpAPI trực tiếp
+            ├── calculator_tool.py
+            ├── education_quiz_tool.py
+            └── ...
+
+Tool call flow:
+  User message
+    → ChatAgent._tool_use_loop()   ← vòng lặp giống bài 163
+    → OpenAI function calling       ← LLM quyết định gọi tool
+    → tool_fn(args)                 ← Python function, KHÔNG qua MCP
+    → kết quả inject vào messages
+    → lặp lại cho đến finish_reason="stop"</div>
+
+<div class="callout success">
+  <strong>Tại sao vuonglearning không dùng MCP ở runtime?</strong><br><br>
+  MCP tốt khi cần tích hợp nhiều loại external systems, reuse across multiple AI clients,
+  hoặc expose tools cho third-party. Vuonglearning có tool set cố định, tất cả internal —
+  custom tool registry đơn giản và nhanh hơn. Không cần overhead của MCP protocol khi
+  tools không được share ra ngoài.
+</div>
+
+<!-- ═══ 4. MCP vs CUSTOM TOOL REGISTRY ═══ -->
+<h2>4. MCP vs Custom Tool Registry</h2>
+
+<table>
+  <tr>
+    <th></th>
+    <th><span class="badge b-blue">MCP</span></th>
+    <th><span class="badge b-orange">Custom Registry</span> (book-management)</th>
+  </tr>
+  <tr>
+    <td><strong>Portability</strong></td>
+    <td>Cao — bất kỳ MCP-compatible host nào cũng dùng được</td>
+    <td>Thấp — tied to app cụ thể</td>
+  </tr>
+  <tr>
+    <td><strong>Setup</strong></td>
+    <td>Phức tạp hơn — server process, JSON-RPC, transport</td>
+    <td>Đơn giản — Python decorator + dict</td>
+  </tr>
+  <tr>
+    <td><strong>Performance</strong></td>
+    <td>Thêm serialization overhead (JSON-RPC)</td>
+    <td>Direct function call — nhanh nhất</td>
+  </tr>
+  <tr>
+    <td><strong>Ecosystem</strong></td>
+    <td>Cộng đồng lớn — 1000+ MCP servers có sẵn</td>
+    <td>Chỉ tools bạn tự viết</td>
+  </tr>
+  <tr>
+    <td><strong>Khi nào dùng</strong></td>
+    <td>Cần reuse tools across nhiều AI clients, hoặc external tools</td>
+    <td>Internal-only tools, một AI app duy nhất</td>
+  </tr>
+  <tr>
+    <td><strong>Ví dụ</strong></td>
+    <td>Claude Code + GitHub, Claude Code + PostgreSQL</td>
+    <td>book-management BookAgent tools</td>
+  </tr>
+</table>
+
+<!-- ═══ 5. BUILD MCP SERVER ═══ -->
+<h2>5. Build một MCP Server đơn giản (Python)</h2>
+
+<p>Để hiểu MCP sâu hơn, đây là cách tạo một MCP Server nhỏ bằng Python SDK chính thức:</p>
+
+<pre><span class="c"># pip install mcp</span>
+<span class="k">from</span> mcp.server.fastmcp <span class="k">import</span> FastMCP
+<span class="k">from</span> sqlalchemy.orm <span class="k">import</span> Session
+
+<span class="c"># Tạo MCP server với tên "book-library"</span>
+mcp = FastMCP(<span class="s">"book-library"</span>)
+
+<span class="c"># Expose tool — giống @register_tool nhưng theo chuẩn MCP</span>
+@mcp.tool()
+<span class="k">def</span> search_books(query: str) -> list[dict]:
+    <span class="s">"""Tìm sách theo từ khóa trong tiêu đề hoặc mô tả."""</span>
+    db: Session = get_db_session()
+    books = db.query(Book).filter(
+        Book.title.ilike(f<span class="s">"%{query}%"</span>)
+    ).limit(<span class="v">10</span>).all()
+    <span class="k">return</span> [
+        {<span class="s">"id"</span>: b.id, <span class="s">"title"</span>: b.title, <span class="s">"author"</span>: b.author}
+        <span class="k">for</span> b <span class="k">in</span> books
+    ]
+
+<span class="c"># Expose resource — dữ liệu đọc được (không phải function call)</span>
+@mcp.resource(<span class="s">"book://{book_id}"</span>)
+<span class="k">def</span> get_book_resource(book_id: int) -> str:
+    <span class="s">"""Lấy nội dung đầy đủ của sách theo ID."""</span>
+    db: Session = get_db_session()
+    book = db.get(Book, book_id)
+    <span class="k">return</span> f<span class="s">"Title: {book.title}\nAuthor: {book.author}\nDesc: {book.description}"</span>
+
+<span class="c"># Chạy server qua stdio (để dùng với Claude Code)</span>
+<span class="k">if</span> __name__ == <span class="s">"__main__"</span>:
+    mcp.run(transport=<span class="s">"stdio"</span>)</pre>
+
+<p>Để Claude Code dùng server này, thêm vào <code>~/.claude/settings.json</code>:</p>
+
+<pre>{
+  <span class="s">"mcpServers"</span>: {
+    <span class="s">"book-library"</span>: {
+      <span class="s">"command"</span>: <span class="s">"python"</span>,
+      <span class="s">"args"</span>: [<span class="s">"/path/to/mcp_server.py"</span>],
+      <span class="s">"env"</span>: {
+        <span class="s">"DATABASE_URL"</span>: <span class="s">"sqlite:///books.db"</span>
+      }
+    }
+  }
+}</pre>
+
+<!-- ═══ 6. TỔNG KẾT ═══ -->
+<h2>6. Tổng kết — Khi nào dùng MCP?</h2>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Recommend</th>
+  </tr>
+  <tr>
+    <td>Tool dùng cho nhiều AI clients khác nhau (Claude Code, VS Code, custom app)</td>
+    <td><span class="badge b-blue">MCP Server</span></td>
+  </tr>
+  <tr>
+    <td>Tích hợp external service đã có MCP server (GitHub, Postgres, Slack)</td>
+    <td><span class="badge b-blue">Dùng existing MCP Server</span></td>
+  </tr>
+  <tr>
+    <td>Tool chỉ dùng trong một AI app cụ thể</td>
+    <td><span class="badge b-orange">Custom Tool Registry</span></td>
+  </tr>
+  <tr>
+    <td>Học/prototype — muốn đơn giản</td>
+    <td><span class="badge b-orange">Custom Tool Registry</span></td>
+  </tr>
+  <tr>
+    <td>Production app cần expose tools ra cho developers</td>
+    <td><span class="badge b-blue">MCP Server</span></td>
+  </tr>
+</table>
+
+<div class="callout">
+  <strong>Key takeaway:</strong> MCP giải quyết vấn đề <em>N × M integrations</em>
+  (N AI clients × M tools). Nếu bạn chỉ có <em>1 app</em> với <em>tools internal</em>,
+  custom registry đơn giản và đủ. Khi cần scale hoặc share, MCP là con đường đúng.
+</div>
+
+<p style="color:var(--muted);font-size:.85rem;margin-top:3rem;border-top:1px solid var(--border);padding-top:1rem;">
+  Bài 207-208 | Model Context Protocol | vuonglearning book-management | 2026
+</p>
+
+</body>
+</html>
