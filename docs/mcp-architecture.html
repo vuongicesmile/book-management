@@ -230,12 +230,12 @@ ChatApp_C ─┘
 
 <h3>Lifecycle của một tool call qua MCP</h3>
 
-<div class="diagram">User: "Tìm PR nào đang open trong repo ilmuchat"
+<div class="diagram">User: "Tìm PR nào đang open trong repo my-project"
       │
       ▼
 Host (Claude Code)
   → LLM nhận prompt + tool list từ MCP Server (GitHub)
-  → LLM quyết định gọi: search_pull_requests({repo: "ilmuchat", state: "open"})
+  → LLM quyết định gọi: search_pull_requests({repo: "my-project", state: "open"})
       │
       ▼ JSON-RPC request qua stdio
 MCP Server (GitHub)
